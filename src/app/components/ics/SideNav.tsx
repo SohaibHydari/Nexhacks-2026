@@ -26,34 +26,34 @@ const navItemsByRole: Record<Role, NavItem[]> = {
     { label: 'Dashboard', icon: <LayoutDashboard className="h-4 w-4" />, path: '/dashboard' },
     { label: 'Event Log', icon: <ScrollText className="h-4 w-4" />, path: '/event-log' },
   ],
-  EMS: [
+  EMSFire: [
     { label: 'Field Home', icon: <MapPin className="h-4 w-4" />, path: '/field' },
     { label: 'Create Request', icon: <PlusCircle className="h-4 w-4" />, path: '/create-request' },
     { label: 'Bulletins', icon: <Bell className="h-4 w-4" />, path: '/bulletins' },
     { label: 'Event Log', icon: <ScrollText className="h-4 w-4" />, path: '/event-log' },
   ],
-  Fire: [
-    { label: 'Field Home', icon: <MapPin className="h-4 w-4" />, path: '/field' },
-    { label: 'Create Request', icon: <PlusCircle className="h-4 w-4" />, path: '/create-request' },
-    { label: 'Bulletins', icon: <Bell className="h-4 w-4" />, path: '/bulletins' },
-    { label: 'Event Log', icon: <ScrollText className="h-4 w-4" />, path: '/event-log' },
-  ],
-  Hospital: [
-    { label: 'Hospital Updates', icon: <Building2 className="h-4 w-4" />, path: '/hospital' },
-    { label: 'Event Log', icon: <ScrollText className="h-4 w-4" />, path: '/event-log' },
-  ],
-  Logistics: [
-    { label: 'Inventory', icon: <Package className="h-4 w-4" />, path: '/inventory' },
-    { label: 'Event Log', icon: <ScrollText className="h-4 w-4" />, path: '/event-log' },
-  ],
-  Planning: [
-    { label: 'Planning Board', icon: <ClipboardList className="h-4 w-4" />, path: '/planning' },
-    { label: 'Event Log', icon: <ScrollText className="h-4 w-4" />, path: '/event-log' },
-  ],
-  Finance: [
-    { label: 'Finance Overview', icon: <DollarSign className="h-4 w-4" />, path: '/finance' },
-    { label: 'Event Log', icon: <ScrollText className="h-4 w-4" />, path: '/event-log' },
-  ],
+  // Fire: [
+  //   { label: 'Field Home', icon: <MapPin className="h-4 w-4" />, path: '/field' },
+  //   { label: 'Create Request', icon: <PlusCircle className="h-4 w-4" />, path: '/create-request' },
+  //   { label: 'Bulletins', icon: <Bell className="h-4 w-4" />, path: '/bulletins' },
+  //   { label: 'Event Log', icon: <ScrollText className="h-4 w-4" />, path: '/event-log' },
+  // ],
+  // Hospital: [
+  //   { label: 'Hospital Updates', icon: <Building2 className="h-4 w-4" />, path: '/hospital' },
+  //   { label: 'Event Log', icon: <ScrollText className="h-4 w-4" />, path: '/event-log' },
+  // ],
+  // Logistics: [
+  //   { label: 'Inventory', icon: <Package className="h-4 w-4" />, path: '/inventory' },
+  //   { label: 'Event Log', icon: <ScrollText className="h-4 w-4" />, path: '/event-log' },
+  // ],
+  // Planning: [
+  //   { label: 'Planning Board', icon: <ClipboardList className="h-4 w-4" />, path: '/planning' },
+  //   { label: 'Event Log', icon: <ScrollText className="h-4 w-4" />, path: '/event-log' },
+  // ],
+  // Finance: [
+  //   { label: 'Finance Overview', icon: <DollarSign className="h-4 w-4" />, path: '/finance' },
+  //   { label: 'Event Log', icon: <ScrollText className="h-4 w-4" />, path: '/event-log' },
+  // ],
 };
 
 interface SideNavProps {

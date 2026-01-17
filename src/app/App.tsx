@@ -7,13 +7,6 @@ import { LoginScreen } from '@/app/screens/LoginScreen';
 import { IncidentSelectScreen } from '@/app/screens/IncidentSelectScreen';
 import { ICDashboard } from '@/app/screens/ICDashboard';
 import { FieldHomeScreen } from '@/app/screens/FieldHomeScreen';
-import { CreateRequestScreen } from '@/app/screens/CreateRequestScreen';
-import { BulletinsScreen } from '@/app/screens/BulletinsScreen';
-import { HospitalScreen } from '@/app/screens/HospitalScreen';
-import { InventoryScreen } from '@/app/screens/InventoryScreen';
-import { PlanningScreen } from '@/app/screens/PlanningScreen';
-import { FinanceScreen } from '@/app/screens/FinanceScreen';
-import { EventLogScreen } from '@/app/screens/EventLogScreen';
 import { RequestDetailDrawer } from '@/app/screens/RequestDetailDrawer';
 import { Request, Bulletin } from '@/app/contexts/DataContext';
 import { Toaster } from '@/app/components/ui/sonner';
@@ -34,7 +27,7 @@ const AppContent: React.FC = () => {
     return <IncidentSelectScreen onSelect={() => {
       // Navigate to role-specific home
       if (user.role === 'IC') setCurrentPath('/dashboard');
-      else if (user.role === 'EMS' || user.role === 'Fire') setCurrentPath('/field');
+      else if (user.role === 'EMSFire' || user.role === 'Fire') setCurrentPath('/field');
       else if (user.role === 'Hospital') setCurrentPath('/hospital');
       else if (user.role === 'Logistics') setCurrentPath('/inventory');
       else if (user.role === 'Planning') setCurrentPath('/planning');
@@ -53,7 +46,7 @@ const AppContent: React.FC = () => {
           {user.role === 'IC' && currentPath === '/dashboard' && <ICDashboard />}
           
           {/* EMS/Fire Routes */}
-          {(user.role === 'EMS' || user.role === 'Fire') && currentPath === '/field' && (
+          {(user.role === 'EMSFire') && currentPath === '/field' && (
             <FieldHomeScreen
               onNavigateToCreateRequest={() => setCurrentPath('/create-request')}
               onNavigateToBulletins={() => setCurrentPath('/bulletins')}
@@ -61,27 +54,6 @@ const AppContent: React.FC = () => {
               onViewBulletin={setSelectedBulletin}
             />
           )}
-          {(user.role === 'EMS' || user.role === 'Fire') && currentPath === '/create-request' && (
-            <CreateRequestScreen onSuccess={() => setCurrentPath('/field')} />
-          )}
-          {(user.role === 'EMS' || user.role === 'Fire') && currentPath === '/bulletins' && (
-            <BulletinsScreen />
-          )}
-          
-          {/* Hospital Routes */}
-          {user.role === 'Hospital' && currentPath === '/hospital' && <HospitalScreen />}
-          
-          {/* Logistics Routes */}
-          {user.role === 'Logistics' && currentPath === '/inventory' && <InventoryScreen />}
-          
-          {/* Planning Routes */}
-          {user.role === 'Planning' && currentPath === '/planning' && <PlanningScreen />}
-          
-          {/* Finance Routes */}
-          {user.role === 'Finance' && currentPath === '/finance' && <FinanceScreen />}
-          
-          {/* Event Log (all roles) */}
-          {currentPath === '/event-log' && <EventLogScreen />}
         </main>
       </div>
 

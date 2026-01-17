@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 
-export type Role = 'IC' | 'EMS' | 'Fire' | 'Hospital' | 'Logistics' | 'Planning' | 'Finance';
+export type Role = 'IC' | 'EMSFire';
 
 interface User {
   id: string;
@@ -39,12 +39,12 @@ export const useAuth = () => {
 
 const demoUsers: Record<Role, User> = {
   IC: { id: '1', name: 'Commander Sarah Chen', email: 'ic@demo.ics', role: 'IC' },
-  EMS: { id: '2', name: 'Medic James Wilson', email: 'ems@demo.ics', role: 'EMS' },
-  Fire: { id: '3', name: 'Captain Maria Rodriguez', email: 'fire@demo.ics', role: 'Fire' },
-  Hospital: { id: '4', name: 'Dr. Emily Thompson', email: 'hospital@demo.ics', role: 'Hospital' },
-  Logistics: { id: '5', name: 'Lt. David Park', email: 'logistics@demo.ics', role: 'Logistics' },
-  Planning: { id: '6', name: 'Chief Lisa Anderson', email: 'planning@demo.ics', role: 'Planning' },
-  Finance: { id: '7', name: 'Admin Tom Miller', email: 'finance@demo.ics', role: 'Finance' },
+  EMSFire: { id: '2', name: 'Medic James Wilson', email: 'ems@demo.ics', role: 'EMSFire' },
+  // Fire: { id: '3', name: 'Captain Maria Rodriguez', email: 'fire@demo.ics', role: 'Fire' },
+  // Hospital: { id: '4', name: 'Dr. Emily Thompson', email: 'hospital@demo.ics', role: 'Hospital' },
+  // Logistics: { id: '5', name: 'Lt. David Park', email: 'logistics@demo.ics', role: 'Logistics' },
+  // Planning: { id: '6', name: 'Chief Lisa Anderson', email: 'planning@demo.ics', role: 'Planning' },
+  // Finance: { id: '7', name: 'Admin Tom Miller', email: 'finance@demo.ics', role: 'Finance' },
 };
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {

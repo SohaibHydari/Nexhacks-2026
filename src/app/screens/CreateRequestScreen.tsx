@@ -89,7 +89,7 @@ export const CreateRequestScreen: React.FC<CreateRequestScreenProps> = ({ onSucc
       incidentId: incident?.id || '',
       requesterId: user?.id || '',
       requesterName: user?.name || '',
-      requesterOrg: user?.role === 'EMS' ? 'EMS Station 12' : 'Fire Station 7',
+      requesterOrg: user?.role === 'EMSFire' ? 'EMS Station 12' : 'Fire Station 7',
       priority,
       status: 'Submitted' as const,
       neededBy,

@@ -29,12 +29,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
     }
   };
 
-  const handleEmailLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    // For demo, just use IC role
-    loginWithRole('IC');
-    onLogin();
-  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -44,7 +38,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
           <CardDescription>Sign in to manage incident resources</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <form onSubmit={handleEmailLogin} className="space-y-4">
+          <form onSubmit={handleDemoLogin} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -68,44 +62,19 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
             <Button type="submit" className="w-full">
               Sign In
             </Button>
+            <div className="space-y-3">
+              <Label>Select Role</Label>
+              <Select value={selectedRole} onValueChange={(value) => setSelectedRole(value as Role)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a role..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="IC">Incident Commander (IC)</SelectItem>
+                  <SelectItem value="EMSFire">EMS/Fire Personnel</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </form>
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card px-2 text-muted-foreground">
-                Or use demo account
-              </span>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <Label>Select Role</Label>
-            <Select value={selectedRole} onValueChange={(value) => setSelectedRole(value as Role)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Choose a role..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="IC">Incident Commander (IC)</SelectItem>
-                <SelectItem value="EMS">EMS Personnel</SelectItem>
-                <SelectItem value="Fire">Fire Personnel</SelectItem>
-                <SelectItem value="Hospital">Hospital Liaison</SelectItem>
-                <SelectItem value="Logistics">Logistics Section</SelectItem>
-                <SelectItem value="Planning">Planning Section</SelectItem>
-                <SelectItem value="Finance">Finance/Admin</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button 
-              variant="secondary" 
-              className="w-full" 
-              onClick={handleDemoLogin}
-              disabled={!selectedRole}
-            >
-              Use Demo Account
-            </Button>
-          </div>
         </CardContent>
       </Card>
     </div>
