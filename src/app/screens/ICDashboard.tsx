@@ -13,7 +13,7 @@ import { HospitalUpdateDrawer } from './HospitalUpdateDrawer';
 import { Request, HospitalUpdate } from '@/app/contexts/DataContext';
 
 export const ICDashboard: React.FC = () => {
-  const { requests, hospitalUpdates } = useData();
+  const { requests, hospitalUpdates, initialPredictions } = useData();
   const [searchValue, setSearchValue] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
@@ -138,6 +138,39 @@ export const ICDashboard: React.FC = () => {
 
         {/* Right Column - Predictions & Hospital Feed */}
         <div className="space-y-4">
+          {/* Initial Predictions */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" />
+                Initial Resource Predictions
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Generated from the initial_resource_model.py baseline.
+              </p>
+              <div className="space-y-2">
+                {initialPredictions.map((prediction) => (
+                  <div
+                    key={prediction.id}
+                    className="flex items-center justify-between rounded-md border px-3 py-2"
+                  >
+                    <div>
+                      <p className="text-sm font-medium">{prediction.resourceType}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {format(new Date(prediction.generatedAt), 'MMM d, h:mm a')}
+                      </p>
+                    </div>
+                    <Badge variant="secondary" className="text-sm">
+                      {prediction.predictedCount}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Prediction Summary */}
           <Card>
             <CardHeader>
