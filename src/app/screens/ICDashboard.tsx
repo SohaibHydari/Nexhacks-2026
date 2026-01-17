@@ -13,7 +13,7 @@ import { HospitalUpdateDrawer } from './HospitalUpdateDrawer';
 import { Request, HospitalUpdate } from '@/app/contexts/DataContext';
 
 export const ICDashboard: React.FC = () => {
-  const { requests, hospitalUpdates } = useData();
+  const {requests, hospitalUpdates, initialPredictions} = useData();
   const [searchValue, setSearchValue] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
