@@ -26,6 +26,20 @@ export interface Unit {
 }
 
 export type VarianceFlag = 'OK' | 'Warning' | 'Critical';
+//So that we can add to select screen
+export type IncidentStatus = 'Active' | 'Monitoring' | 'Closed';
+export type IncidentSeverity = 'Low' | 'Medium' | 'High' | 'Critical';
+
+export interface Incident {
+  id: string;
+  name: string;
+  type: string;
+  severity: IncidentSeverity;
+  status: IncidentStatus;
+  startTime: string; // ISO
+  createdAt?: string;
+}
+
 
 export interface ResourceLine {
   id: string;
@@ -132,6 +146,7 @@ interface DataContextType {
   fulfillments: Fulfillment[];
   eventLogs: EventLog[];
   units: Unit[];
+  incidents: Incident[];
   addRequest: (request: Omit<Request, 'id' | 'createdAt' | 'updatedAt' | 'version'>) => void;
   updateRequest: (id: string, updates: Partial<Request>) => void;
   addHospitalUpdate: (update: Omit<HospitalUpdate, 'id' | 'timestamp'>) => void;
@@ -143,6 +158,7 @@ interface DataContextType {
   logEvent: (event: Omit<EventLog, 'id' | 'timestamp'>) => void;
   setUnitStatus: (unitId: string, status: UnitStatus) => void;
   respondToRequest: (requestId: string, assignedUnitIds: string[], note?: string) => void;
+  addIncident: (incident: Omit<Incident, 'id' | 'startTime'> & { startTime?: string }) => void;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -165,6 +181,15 @@ const initialUnits: Unit[] = [
   { id: 'ENG-2', name: 'Engine 2', type: 'Engine', status: 'In Transit to Scene' },
   { id: 'ENG-3', name: 'Engine 3', type: 'Engine', status: 'Available' },
 ];
+
+//Mock Initial Incidents + state
+const initialIncidents: Incident[] = [
+  { id:'INC-001', name:'Wildfire - Cedar Ridge', type:'Wildfire', severity:'Critical', status:'Active', startTime:'2026-01-17T06:00:00' },
+  { id:'INC-002', name:'Mass Casualty - Highway 101', type:'MCI', severity:'High', status:'Active', startTime:'2026-01-17T09:30:00' },
+  { id:'INC-003', name:'Flood Response - Downtown', type:'Flood', severity:'Medium', status:'Monitoring', startTime:'2026-01-16T14:00:00' },
+];
+
+
 
 const initialRequests: Request[] = [
   {
@@ -372,6 +397,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [fulfillments, setFulfillments] = useState<Fulfillment[]>(initialFulfillments);
   const [eventLogs, setEventLogs] = useState<EventLog[]>([]);
   const [units, setUnits] = useState<Unit[]>(initialUnits);
+  const [incidents, setIncidents] = useState<Incident[]>(initialIncidents);
+
+
 
   const setUnitStatus = (unitId: string, status: UnitStatus) => {
     setUnits(prev => prev.map(u => (u.id === unitId ? { ...u, status } : u)));
@@ -465,6 +493,27 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       payload: { assignedUnitIds, note },
     });
   };
+
+  //how to add incident
+  const addIncident = (incident: Omit<Incident, 'id' | 'startTime'> & { startTime?: string }) => {
+  const now = new Date().toISOString();
+  const newIncident: Incident = {
+    ...incident,
+    id: `INC-${String(incidents.length + 1).padStart(3, '0')}`,
+    startTime: incident.startTime ?? now,
+    createdAt: now,
+  };
+  setIncidents(prev => [newIncident, ...prev]);
+
+  logEvent({
+    actor: 'System',
+    action: 'Created Incident',
+    entityType: 'Incident',
+    entityId: newIncident.id,
+    payload: newIncident,
+  });
+};
+
 
 
   const addHospitalUpdate = (update: Omit<HospitalUpdate, 'id' | 'timestamp'>) => {
@@ -562,6 +611,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       eventLogs,
       // NEW EMS tables
       units,
+      //new incident
+      incidents,
       addRequest,
       updateRequest,
       addHospitalUpdate,
@@ -574,7 +625,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       // NEW EMS functions
       setUnitStatus,
       respondToRequest,
-
+      //new incident functions
+      addIncident,
     }}>
       {children}
     </DataContext.Provider>
