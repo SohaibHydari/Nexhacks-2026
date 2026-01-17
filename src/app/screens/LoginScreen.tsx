@@ -59,9 +59,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
-            <Button type="submit" className="w-full">
-              Sign In
-            </Button>
             <div className="space-y-3">
               <Label>Select Role</Label>
               <Select value={selectedRole} onValueChange={(value) => setSelectedRole(value as Role)}>
@@ -74,6 +71,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                 </SelectContent>
               </Select>
             </div>
+             <Button type="submit" className="w-full">
+              Sign In
+            </Button>
           </form>
         </CardContent>
       </Card>

@@ -28,10 +28,6 @@ const AppContent: React.FC = () => {
       // Navigate to role-specific home
       if (user.role === 'IC') setCurrentPath('/dashboard');
       else if (user.role === 'EMSFire' || user.role === 'Fire') setCurrentPath('/field');
-      else if (user.role === 'Hospital') setCurrentPath('/hospital');
-      else if (user.role === 'Logistics') setCurrentPath('/inventory');
-      else if (user.role === 'Planning') setCurrentPath('/planning');
-      else if (user.role === 'Finance') setCurrentPath('/finance');
     }} />;
   }
 

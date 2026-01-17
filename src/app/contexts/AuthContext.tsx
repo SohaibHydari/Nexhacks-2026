@@ -39,7 +39,7 @@ export const useAuth = () => {
 
 const demoUsers: Record<Role, User> = {
   IC: { id: '1', name: 'Commander Sarah Chen', email: 'ic@demo.ics', role: 'IC' },
-  EMSFire: { id: '2', name: 'Medic James Wilson', email: 'ems@demo.ics', role: 'EMSFire' },
+  EMSFire: { id: '2', name: 'EMS Station', email: 'ems@demo.ics', role: 'EMSFire' },
   // Fire: { id: '3', name: 'Captain Maria Rodriguez', email: 'fire@demo.ics', role: 'Fire' },
   // Hospital: { id: '4', name: 'Dr. Emily Thompson', email: 'hospital@demo.ics', role: 'Hospital' },
   // Logistics: { id: '5', name: 'Lt. David Park', email: 'logistics@demo.ics', role: 'Logistics' },
