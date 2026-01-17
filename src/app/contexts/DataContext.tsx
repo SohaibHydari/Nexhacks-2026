@@ -23,6 +23,13 @@ export interface ResourceLine {
   unitCost?: number;
 }
 
+export interface ResourcePrediction {
+  id: string;
+  resourceType: string;
+  predictedCount: number;
+  generatedAt: string;
+}
+
 export interface Request {
   id: string;
   incidentId: string;
@@ -110,6 +117,7 @@ interface DataContextType {
   inventory: InventoryLot[];
   fulfillments: Fulfillment[];
   eventLogs: EventLog[];
+  initialPredictions: ResourcePrediction[];
   addRequest: (request: Omit<Request, 'id' | 'createdAt' | 'updatedAt' | 'version'>) => void;
   updateRequest: (id: string, updates: Partial<Request>) => void;
   addHospitalUpdate: (update: Omit<HospitalUpdate, 'id' | 'timestamp'>) => void;
@@ -330,6 +338,21 @@ const initialFulfillments: Fulfillment[] = [
   },
 ];
 
+const initialPredictions: ResourcePrediction[] = [
+  {
+    id: 'PRED-001',
+    resourceType: 'Fire Engines',
+    predictedCount: 4,
+    generatedAt: '2026-01-17T07:30:00',
+  },
+  {
+    id: 'PRED-002',
+    resourceType: 'Ambulances',
+    predictedCount: 6,
+    generatedAt: '2026-01-17T07:30:00',
+  },
+];
+
 export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [requests, setRequests] = useState<Request[]>(initialRequests);
   const [hospitalUpdates, setHospitalUpdates] = useState<HospitalUpdate[]>(initialHospitalUpdates);
@@ -337,6 +360,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [inventory, setInventory] = useState<InventoryLot[]>(initialInventory);
   const [fulfillments, setFulfillments] = useState<Fulfillment[]>(initialFulfillments);
   const [eventLogs, setEventLogs] = useState<EventLog[]>([]);
+  const [predictions] = useState<ResourcePrediction[]>(initialPredictions);
 
   const addRequest = (request: Omit<Request, 'id' | 'createdAt' | 'updatedAt' | 'version'>) => {
     const now = new Date().toISOString();
@@ -468,6 +492,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       inventory,
       fulfillments,
       eventLogs,
+      initialPredictions: predictions,
       addRequest,
       updateRequest,
       addHospitalUpdate,
