@@ -17,9 +17,6 @@ class Unit(models.Model):
     unit_type = models.CharField(max_length=10, choices=UnitType.choices)
     status = models.CharField(max_length=30, choices=Status.choices, default=Status.AVAILABLE)
 
-    last_status_at = models.DateTimeField(default=timezone.now)  # when status last changed
-    updated_at = models.DateTimeField(auto_now=True)
-
     def __str__(self):
         return f"{self.name} ({self.unit_type})"
 
