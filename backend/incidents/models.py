@@ -1,4 +1,6 @@
 from django.db import models
+from django.utils import timezone
+
 
 class Unit(models.Model):
     class UnitType(models.TextChoices):
@@ -7,17 +9,20 @@ class Unit(models.Model):
 
     class Status(models.TextChoices):
         AVAILABLE = "AVAILABLE", "Available"
-        DISPATCHED = "DISPATCHED", "Dispatched"
-        TO_SCENE = "TO_SCENE", "In transit to scene"
+        ENROUTE = "ENROUTE", "Enroute to scene"
         ON_SCENE = "ON_SCENE", "On scene"
-        TO_HOSPITAL = "TO_HOSPITAL", "In transit to hospital"
-        AT_HOSPITAL = "AT_HOSPITAL", "At hospital"
-        OUT_OF_SERVICE = "OOS", "Out of service"
+        TRANSPORTING = "TRANSPORTING", "Transporting to hospital"
 
     name = models.CharField(max_length=50, unique=True)  # "Ambulance 3"
     unit_type = models.CharField(max_length=10, choices=UnitType.choices)
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.AVAILABLE)
-    last_update = models.DateTimeField(auto_now=True)
+    status = models.CharField(max_length=30, choices=Status.choices, default=Status.AVAILABLE)
+
+    last_status_at = models.DateTimeField(default=timezone.now)  # when status last changed
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.unit_type})"
+
 
 class ResourceRequest(models.Model):
     class RequestStatus(models.TextChoices):
@@ -25,26 +30,56 @@ class ResourceRequest(models.Model):
         APPROVED = "APPROVED", "Approved"
         DENIED = "DENIED", "Denied"
         PARTIAL = "PARTIAL", "Partially fulfilled"
+        COMPLETED = "COMPLETED", "Completed"
 
-    requested_by_role = models.CharField(max_length=20)  # FIRE / EMS / IC (keep simple for hackathon)
     unit_type = models.CharField(max_length=10, choices=Unit.UnitType.choices)
     quantity = models.IntegerField(default=1)
-    note = models.TextField(blank=True)
+
+    priority = models.CharField(max_length=20, blank=True, default="Medium")
+    location = models.CharField(max_length=200, blank=True, default="")
+
     status = models.CharField(max_length=20, choices=RequestStatus.choices, default=RequestStatus.PENDING)
+
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
 
 class RequestAssignment(models.Model):
     request = models.ForeignKey(ResourceRequest, on_delete=models.CASCADE, related_name="assignments")
     unit = models.ForeignKey(Unit, on_delete=models.CASCADE, related_name="assignments")
-    assigned_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         unique_together = ("request", "unit")
 
+
 class LogEntry(models.Model):
-    timestamp = models.DateTimeField(auto_now_add=True)
+    """
+    Immutable status transition log (status changes only).
+    """
+    created_at = models.DateTimeField(auto_now_add=True)
     unit = models.ForeignKey(Unit, on_delete=models.CASCADE, related_name="logs")
-    event_type = models.CharField(max_length=50)  # DISPATCHED, ARRIVED_ON_SCENE, etc.
-    details = models.TextField(blank=True)
+    from_status = models.CharField(max_length=30)
+    to_status = models.CharField(max_length=30)
+
+    def __str__(self):
+        return f"{self.created_at} | {self.unit.name}: {self.from_status} -> {self.to_status}"
 
 
+def change_unit_status(unit: Unit, new_status: str):
+    """
+    Only use this to change statuses (so logs are always recorded).
+    """
+    old = unit.status
+    if old == new_status:
+        return
+
+    unit.status = new_status
+    unit.last_status_at = timezone.now()
+    unit.save(update_fields=["status", "last_status_at", "updated_at"])
+
+    LogEntry.objects.create(
+        unit=unit,
+        from_status=old,
+        to_status=new_status,
+    )
