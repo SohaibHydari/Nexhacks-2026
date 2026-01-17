@@ -37,6 +37,13 @@ export interface ResourceLine {
   unitCost?: number;
 }
 
+export interface ResourcePrediction {
+  id: string;
+  resourceType: string;
+  predictedCount: number;
+  generatedAt: string;
+}
+
 export interface Request {
   id: string;
   incidentId: string;
