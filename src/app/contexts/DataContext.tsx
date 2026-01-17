@@ -11,6 +11,20 @@ export type RequestStatus =
   | 'Rejected';
 
 export type Priority = 'Low' | 'Medium' | 'High' | 'Critical';
+export type UnitType = 'Ambulance' | 'Engine';
+export type UnitStatus =
+  | 'Available'
+  | 'On Scene'
+  | 'In Transit to Scene'
+  | 'In Transit to Hospital';
+
+export interface Unit {
+  id: string;        // "AMB-1"
+  name: string;      // "Ambulance 1"
+  type: UnitType;
+  status: UnitStatus;
+}
+
 export type VarianceFlag = 'OK' | 'Warning' | 'Critical';
 
 export interface ResourceLine {
@@ -21,6 +35,13 @@ export interface ResourceLine {
   qtyApproved?: number;
   substitution?: string;
   unitCost?: number;
+}
+
+export interface ResourcePrediction {
+  id: string;
+  resourceType: string;
+  predictedCount: number;
+  generatedAt: string;
 }
 
 export interface Request {
@@ -110,6 +131,7 @@ interface DataContextType {
   inventory: InventoryLot[];
   fulfillments: Fulfillment[];
   eventLogs: EventLog[];
+  units: Unit[];
   addRequest: (request: Omit<Request, 'id' | 'createdAt' | 'updatedAt' | 'version'>) => void;
   updateRequest: (id: string, updates: Partial<Request>) => void;
   addHospitalUpdate: (update: Omit<HospitalUpdate, 'id' | 'timestamp'>) => void;
@@ -119,6 +141,8 @@ interface DataContextType {
   addFulfillment: (fulfillment: Omit<Fulfillment, 'id' | 'createdAt'>) => void;
   updateFulfillment: (id: string, updates: Partial<Fulfillment>) => void;
   logEvent: (event: Omit<EventLog, 'id' | 'timestamp'>) => void;
+  setUnitStatus: (unitId: string, status: UnitStatus) => void;
+  respondToRequest: (requestId: string, assignedUnitIds: string[], note?: string) => void;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -132,6 +156,16 @@ export const useData = () => {
 };
 
 // Mock initial data
+const initialUnits: Unit[] = [
+  { id: 'AMB-1', name: 'Ambulance 1', type: 'Ambulance', status: 'Available' },
+  { id: 'AMB-2', name: 'Ambulance 2', type: 'Ambulance', status: 'On Scene' },
+  { id: 'AMB-3', name: 'Ambulance 3', type: 'Ambulance', status: 'In Transit to Scene' },
+  { id: 'AMB-4', name: 'Ambulance 4', type: 'Ambulance', status: 'In Transit to Hospital' },
+  { id: 'ENG-1', name: 'Engine 1', type: 'Engine', status: 'On Scene' },
+  { id: 'ENG-2', name: 'Engine 2', type: 'Engine', status: 'In Transit to Scene' },
+  { id: 'ENG-3', name: 'Engine 3', type: 'Engine', status: 'Available' },
+];
+
 const initialRequests: Request[] = [
   {
     id: 'REQ-001',
@@ -337,6 +371,22 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [inventory, setInventory] = useState<InventoryLot[]>(initialInventory);
   const [fulfillments, setFulfillments] = useState<Fulfillment[]>(initialFulfillments);
   const [eventLogs, setEventLogs] = useState<EventLog[]>([]);
+  const [units, setUnits] = useState<Unit[]>(initialUnits);
+
+  const setUnitStatus = (unitId: string, status: UnitStatus) => {
+    setUnits(prev => prev.map(u => (u.id === unitId ? { ...u, status } : u)));
+
+    const unit = units.find(u => u.id === unitId);
+    if (unit) {
+      logEvent({
+        actor: 'EMS Station',
+        action: 'Unit Status Updated',
+        entityType: 'Unit',
+        entityId: unitId,
+        payload: { from: unit.status, to: status, unitName: unit.name },
+      });
+    }
+  };
 
   const addRequest = (request: Omit<Request, 'id' | 'createdAt' | 'updatedAt' | 'version'>) => {
     const now = new Date().toISOString();
@@ -374,6 +424,48 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       });
     }
   };
+    const respondToRequest = (requestId: string, assignedUnitIds: string[], note?: string) => {
+    // 1) Mark units as dispatched (enroute)
+    setUnits(prev =>
+      prev.map(u =>
+        assignedUnitIds.includes(u.id)
+          ? { ...u, status: 'In Transit to Scene' }
+          : u
+      )
+    );
+
+    // 2) Update the request with a response message + status
+    const msg =
+      `EMS Dispatch assigned: ${assignedUnitIds.join(', ')}` +
+      (note ? ` — Note: ${note}` : '');
+
+    updateRequest(requestId, {
+      status: 'In Fulfillment',
+      decisionMessage: msg,
+    });
+
+    // 3) Log each unit dispatch
+    assignedUnitIds.forEach(unitId => {
+      const unit = units.find(u => u.id === unitId);
+      logEvent({
+        actor: 'EMS Dispatch',
+        action: 'Dispatched',
+        entityType: 'Unit',
+        entityId: unitId,
+        payload: { requestId, unitName: unit?.name ?? unitId },
+      });
+    });
+
+    // 4) Log request response
+    logEvent({
+      actor: 'EMS Dispatch',
+      action: 'Responded to Request',
+      entityType: 'Request',
+      entityId: requestId,
+      payload: { assignedUnitIds, note },
+    });
+  };
+
 
   const addHospitalUpdate = (update: Omit<HospitalUpdate, 'id' | 'timestamp'>) => {
     const newUpdate: HospitalUpdate = {
@@ -468,6 +560,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       inventory,
       fulfillments,
       eventLogs,
+      // NEW EMS tables
+      units,
       addRequest,
       updateRequest,
       addHospitalUpdate,
@@ -477,6 +571,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       addFulfillment,
       updateFulfillment,
       logEvent,
+      // NEW EMS functions
+      setUnitStatus,
+      respondToRequest,
+
     }}>
       {children}
     </DataContext.Provider>
