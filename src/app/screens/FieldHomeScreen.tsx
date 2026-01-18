@@ -145,6 +145,7 @@ export const FieldHomeScreen: React.FC<FieldHomeScreenProps> = ({
   const [selectedUnitIds, setSelectedUnitIds] = useState<number[]>([]);
   const [note, setNote] = useState('');
   const [dispatching, setDispatching] = useState(false);
+  const [unitStatusUpdating, setUnitStatusUpdating] = useState<number | null>(null);
 
   const openRespond = (req: ApiResourceRequest) => {
     setActiveRequest(req);
@@ -201,6 +202,22 @@ export const FieldHomeScreen: React.FC<FieldHomeScreenProps> = ({
     }
   };
 
+  const markUnitAvailable = async (unitId: number) => {
+    setErr(null);
+    setUnitStatusUpdating(unitId);
+    try {
+      const updated = await api<ApiUnit>(`/units/${unitId}/status/`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'AVAILABLE' }),
+      });
+      setUnits((prev) => prev.map((u) => (u.id === unitId ? { ...u, status: updated.status } : u)));
+    } catch (e: any) {
+      setErr(e?.message ?? 'Failed to update unit status');
+    } finally {
+      setUnitStatusUpdating(null);
+    }
+  };
+
   // =========================
   // EMS UI (server-backed)
   // =========================
@@ -252,6 +269,16 @@ export const FieldHomeScreen: React.FC<FieldHomeScreenProps> = ({
                         <Badge variant="outline" className="text-xs">
                           {STATUS_LABEL[u.status]}
                         </Badge>
+                        {u.status === 'TRANSPORTING' && (
+                          <Button
+                            size="xs"
+                            variant="secondary"
+                            onClick={() => markUnitAvailable(u.id)}
+                            disabled={unitStatusUpdating === u.id || dispatching}
+                          >
+                            {unitStatusUpdating === u.id ? 'Updating...' : 'Mark Available'}
+                          </Button>
+                        )}
                       </div>
                     </div>
                   ))}
