@@ -16,13 +16,13 @@ import { EventLogScreen } from '@/app/screens/EventLogScreen';
 const AppContent: React.FC = () => {
   const { user, incident, clearIncident } = useAuth();
   const [currentPath, setCurrentPath] = useState('/dashboard');
-  const [selectedRequest, setSelectedRequest] = useState<Request | null>(null);
-  const [selectedBulletin, setSelectedBulletin] = useState<Bulletin | null>(null);
+  // const [selectedRequest, setSelectedRequest] = useState<Request | null>(null);
+  // const [selectedBulletin, setSelectedBulletin] = useState<Bulletin | null>(null);
 
   const goToIncidentSelect = () => {
     // close any drawers/modals
-    setSelectedRequest(null);
-    setSelectedBulletin(null);
+    // setSelectedRequest(null);
+    // setSelectedBulletin(null);
 
     // clear incident + route to select screen
     clearIncident();
@@ -61,21 +61,17 @@ const AppContent: React.FC = () => {
           {user.role === 'IC' && currentPath === '/event-log' && (<EventLogScreen />)}
 
           {/* EMS/Fire Routes */}
+          {user.role === 'EMSFire' && currentPath === '/event-log' && (<EventLogScreen />)}
           {user.role === 'EMSFire' && currentPath === '/field' && (
-            <FieldHomeScreen
-              onNavigateToCreateRequest={() => setCurrentPath('/create-request')}
-              onNavigateToBulletins={() => setCurrentPath('/bulletins')}
-              onViewRequest={setSelectedRequest}
-              onViewBulletin={setSelectedBulletin}
-            />
+            <FieldHomeScreen/>
           )}
         </main>
       </div>
 
       {/* Global Drawers */}
-      {selectedRequest && (
+      {/* {selectedRequest && (
         <RequestDetailDrawer request={selectedRequest} onClose={() => setSelectedRequest(null)} />
-      )}
+      )} */}
 
       <Toaster />
     </div>
