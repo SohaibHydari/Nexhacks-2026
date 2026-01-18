@@ -70,11 +70,7 @@ def change_unit_status(unit: Unit, new_status: str):
     old = unit.status
     if old == new_status:
         return
-
-    unit.status = new_status
     unit.last_status_at = timezone.now()
-    unit.save(update_fields=["status", "last_status_at", "updated_at"])
-
     LogEntry.objects.create(
         unit=unit,
         from_status=old,

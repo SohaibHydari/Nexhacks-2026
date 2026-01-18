@@ -32,24 +32,19 @@ type UnitTypeCode = 'AMB' | 'ENG';
 type UnitStatusCode = 'AVAILABLE' | 'ENROUTE' | 'ON_SCENE' | 'TRANSPORTING';
 
 type ApiUnit = {
-  id: number;              // Django PK
-  name: string;            // "Ambulance 3"
+  id: number; // Django PK
+  name: string; // "Ambulance 3"
   unit_type: UnitTypeCode; // "AMB"
-  status: UnitStatusCode;  // "AVAILABLE"
+  status: UnitStatusCode; // "AVAILABLE"
   last_status_at: string;
   updated_at: string;
 };
 
-type ApiResourceRequestStatus =
-  | 'PENDING'
-  | 'APPROVED'
-  | 'DENIED'
-  | 'PARTIAL'
-  | 'COMPLETED';
+type ApiResourceRequestStatus = 'PENDING' | 'APPROVED' | 'DENIED' | 'PARTIAL' | 'COMPLETED';
 
 type ApiResourceRequest = {
-  id: number;              // Django PK
-  unit_type: UnitTypeCode; // "AMB"
+  id: number; // Django PK
+  unit_type: UnitTypeCode; // "AMB" or "ENG"
   quantity: number;
   priority: string;
   location: string;
@@ -66,11 +61,9 @@ const STATUS_LABEL: Record<UnitStatusCode, string> = {
   TRANSPORTING: 'Transporting',
 };
 
-const STATUS_TO_API: Record<string, UnitStatusCode> = {
-  'Available': 'AVAILABLE',
-  'Enroute to scene': 'ENROUTE',
-  'On scene': 'ON_SCENE',
-  'Transporting': 'TRANSPORTING',
+const UNIT_LABEL: Record<UnitTypeCode, string> = {
+  AMB: 'Ambulance',
+  ENG: 'Engine',
 };
 
 // --------------------
@@ -127,7 +120,6 @@ export const FieldHomeScreen: React.FC<FieldHomeScreenProps> = ({
 
   const allUnits = useMemo(() => units || [], [units]);
 
-
   const unitCounts = useMemo(() => {
     const counts = {
       Available: 0,
@@ -147,16 +139,12 @@ export const FieldHomeScreen: React.FC<FieldHomeScreenProps> = ({
     return counts;
   }, [allUnits]);
 
-
-  const availableAmbulances = useMemo(() => {
-    return allUnits.filter((u) => u.status === 'AVAILABLE');
-  }, [allUnits]);
-
   // ---- Respond modal state
   const [respondOpen, setRespondOpen] = useState(false);
   const [activeRequest, setActiveRequest] = useState<ApiResourceRequest | null>(null);
   const [selectedUnitIds, setSelectedUnitIds] = useState<number[]>([]);
   const [note, setNote] = useState('');
+  const [dispatching, setDispatching] = useState(false);
 
   const openRespond = (req: ApiResourceRequest) => {
     setActiveRequest(req);
@@ -165,32 +153,52 @@ export const FieldHomeScreen: React.FC<FieldHomeScreenProps> = ({
     setRespondOpen(true);
   };
 
-  const toggleSelected = (unitId: number) => {
-    setSelectedUnitIds((prev) =>
-      prev.includes(unitId) ? prev.filter((id) => id !== unitId) : [...prev, unitId]
-    );
+  const closeRespond = () => {
+    setRespondOpen(false);
+    setActiveRequest(null);
+    setSelectedUnitIds([]);
+    setNote('');
   };
 
-  const setUnitStatus = async (unitId: number, status: UnitStatusCode) => {
-    await api(`/units/${unitId}/status/`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status }),
-    });
-    // refresh to reflect status + log created server-side
-    await refresh();
+  const toggleSelected = (unitId: number) => {
+    setSelectedUnitIds((prev) => (prev.includes(unitId) ? prev.filter((id) => id !== unitId) : [...prev, unitId]));
   };
+
+  // ✅ IMPORTANT: available units should depend on ACTIVE REQUEST TYPE
+  const availableUnitsForActiveRequest = useMemo(() => {
+    if (!activeRequest) return [];
+    return allUnits.filter((u) => u.status === 'AVAILABLE' && u.unit_type === activeRequest.unit_type);
+  }, [allUnits, activeRequest]);
 
   const dispatchRequest = async () => {
     if (!activeRequest) return;
+    if (selectedUnitIds.length === 0) return;
 
-    await api(`/requests/${activeRequest.id}/dispatch/`, {
-      method: 'POST',
-      body: JSON.stringify({ unit_ids: selectedUnitIds, note }),
-    });
+    setDispatching(true);
+    setErr(null);
 
-    setRespondOpen(false);
-    setActiveRequest(null);
-    await refresh();
+    // ✅ optimistic update: immediately show ENROUTE for selected units
+    setUnits((prev) =>
+      prev.map((u) => (selectedUnitIds.includes(u.id) ? { ...u, status: 'ENROUTE' } : u))
+    );
+
+    try {
+      await api(`/requests/${activeRequest.id}/dispatch/`, {
+        method: 'POST',
+        body: JSON.stringify({ unit_ids: selectedUnitIds, note }),
+      });
+
+      closeRespond();
+
+      // ✅ reconcile with server (in case backend also updated request status, etc.)
+      await refresh();
+    } catch (e: any) {
+      // rollback optimistic update if dispatch failed
+      await refresh();
+      setErr(e?.message ?? 'Dispatch failed');
+    } finally {
+      setDispatching(false);
+    }
   };
 
   // =========================
@@ -201,9 +209,7 @@ export const FieldHomeScreen: React.FC<FieldHomeScreenProps> = ({
       <div className="p-6 space-y-6">
         <div className="mb-2">
           <h1 className="text-2xl font-semibold mb-1">EMS Station</h1>
-          <p className="text-muted-foreground">
-            Monitor unit readiness and respond to IC dispatch requests
-          </p>
+          <p className="text-muted-foreground">Monitor unit readiness and respond to IC dispatch requests</p>
           {loading && <p className="text-sm text-muted-foreground mt-2"></p>}
           {err && <p className="text-sm text-red-600 mt-2">{err}</p>}
         </div>
@@ -231,14 +237,14 @@ export const FieldHomeScreen: React.FC<FieldHomeScreenProps> = ({
               <CardContent>
                 <div className="space-y-2">
                   {allUnits.map((u) => (
-                    <div
-                      key={u.id}
-                      className="flex items-center justify-between border rounded-lg p-3"
-                    >
+                    <div key={u.id} className="flex items-center justify-between border rounded-lg p-3">
                       <div className="flex items-center gap-3">
                         <div className="font-medium">{u.name}</div>
                         <Badge variant="secondary" className="text-xs">
                           #{u.id}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs">
+                          {UNIT_LABEL[u.unit_type]}
                         </Badge>
                       </div>
 
@@ -246,7 +252,6 @@ export const FieldHomeScreen: React.FC<FieldHomeScreenProps> = ({
                         <Badge variant="outline" className="text-xs">
                           {STATUS_LABEL[u.status]}
                         </Badge>
-
                       </div>
                     </div>
                   ))}
@@ -262,49 +267,53 @@ export const FieldHomeScreen: React.FC<FieldHomeScreenProps> = ({
                 <CardTitle>Incoming IC Requests</CardTitle>
                 {requests.length > 0 && <Badge variant="destructive">{requests.length} New</Badge>}
               </CardHeader>
+
               <CardContent className="space-y-3">
                 {requests.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    No incoming ambulance requests.
-                  </p>
+                  <p className="text-sm text-muted-foreground text-center py-4">No incoming requests.</p>
                 ) : (
-                  requests.map((req) => (
-                    <div
-                      key={req.id}
-                      className="p-3 border rounded-lg hover:bg-accent transition-colors"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <div className="font-medium text-sm">REQ #{req.id}</div>
-                            <Badge variant="outline" className="text-xs">
-                              {req.priority || 'Medium'}
-                            </Badge>
+                  requests.map((req) => {
+                    const unitLabel = UNIT_LABEL[req.unit_type];
+
+                    const availableForReq = allUnits.filter(
+                      (u) => u.status === 'AVAILABLE' && u.unit_type === req.unit_type
+                    );
+
+                    const noneAvailable = availableForReq.length === 0;
+
+                    return (
+                      <div key={req.id} className="p-3 border rounded-lg hover:bg-accent transition-colors">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <div className="font-medium text-sm">REQ #{req.id}</div>
+                              <Badge variant="outline" className="text-xs">
+                                {req.priority || 'Medium'}
+                              </Badge>
+                            </div>
+
+                            <div className="text-xs text-muted-foreground mt-1">
+                              Needed: {req.quantity} {unitLabel}(s) • {req.location || '—'}
+                            </div>
+
+                            <div className="text-xs text-muted-foreground">
+                              Created: {format(new Date(req.created_at), 'MMM d, h:mm a')}
+                            </div>
                           </div>
-                          <div className="text-xs text-muted-foreground mt-1">
-                            Needed: {req.quantity} Ambulance(s) • {req.location || '—'}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            Created: {format(new Date(req.created_at), 'MMM d, h:mm a')}
-                          </div>
+
+                          <Button size="sm" onClick={() => openRespond(req)} disabled={noneAvailable}>
+                            Respond
+                          </Button>
                         </div>
 
-                        <Button
-                          size="sm"
-                          onClick={() => openRespond(req)}
-                          disabled={availableAmbulances.length === 0}
-                        >
-                          Respond
-                        </Button>
+                        {noneAvailable && (
+                          <p className="text-xs text-muted-foreground mt-2">
+                            No available {unitLabel.toLowerCase()}s to dispatch.
+                          </p>
+                        )}
                       </div>
-
-                      {availableAmbulances.length === 0 && (
-                        <p className="text-xs text-muted-foreground mt-2">
-                          No available ambulances to dispatch.
-                        </p>
-                      )}
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </CardContent>
             </Card>
@@ -319,10 +328,10 @@ export const FieldHomeScreen: React.FC<FieldHomeScreenProps> = ({
                 <div>
                   <div className="text-lg font-semibold">Respond to REQ #{activeRequest.id}</div>
                   <div className="text-sm text-muted-foreground">
-                    Select available ambulances to dispatch
+                    Select available {UNIT_LABEL[activeRequest.unit_type].toLowerCase()}s to dispatch
                   </div>
                 </div>
-                <Button variant="ghost" onClick={() => setRespondOpen(false)}>
+                <Button variant="ghost" onClick={closeRespond} disabled={dispatching}>
                   Close
                 </Button>
               </div>
@@ -333,23 +342,35 @@ export const FieldHomeScreen: React.FC<FieldHomeScreenProps> = ({
                   <b>{activeRequest.priority || 'Medium'}</b>
                 </div>
 
+                <div className="text-sm">
+                  <span className="text-muted-foreground">Location:</span>{' '}
+                  <b>{activeRequest.location || '—'}</b>
+                </div>
+
                 <div className="border rounded-lg p-3 max-h-56 overflow-auto space-y-2">
-                  {availableAmbulances.map((u) => (
-                    <label key={u.id} className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={selectedUnitIds.includes(u.id)}
-                          onChange={() => toggleSelected(u.id)}
-                        />
-                        <span className="text-sm">{u.name}</span>
-                        <Badge variant="secondary" className="text-xs">#{u.id}</Badge>
-                      </div>
-                      <Badge variant="outline" className="text-xs">
-                        {STATUS_LABEL[u.status]}
-                      </Badge>
-                    </label>
-                  ))}
+                  {availableUnitsForActiveRequest.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No available units for this request.</p>
+                  ) : (
+                    availableUnitsForActiveRequest.map((u) => (
+                      <label key={u.id} className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedUnitIds.includes(u.id)}
+                            onChange={() => toggleSelected(u.id)}
+                            disabled={dispatching}
+                          />
+                          <span className="text-sm">{u.name}</span>
+                          <Badge variant="secondary" className="text-xs">
+                            #{u.id}
+                          </Badge>
+                        </div>
+                        <Badge variant="outline" className="text-xs">
+                          {STATUS_LABEL[u.status]}
+                        </Badge>
+                      </label>
+                    ))
+                  )}
                 </div>
 
                 <div>
@@ -360,17 +381,22 @@ export const FieldHomeScreen: React.FC<FieldHomeScreenProps> = ({
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
                     placeholder="e.g., 2 units dispatched now, 1 delayed 10 min"
+                    disabled={dispatching}
                   />
                 </div>
 
                 <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setRespondOpen(false)}>
+                  <Button variant="outline" onClick={closeRespond} disabled={dispatching}>
                     Cancel
                   </Button>
-                  <Button onClick={dispatchRequest} disabled={selectedUnitIds.length === 0}>
-                    Dispatch {selectedUnitIds.length} Unit(s)
+                  <Button onClick={dispatchRequest} disabled={dispatching || selectedUnitIds.length === 0}>
+                    {dispatching ? 'Dispatching...' : `Dispatch ${selectedUnitIds.length} Unit(s)`}
                   </Button>
                 </div>
+
+                <p className="text-xs text-muted-foreground">
+                  Dispatch should set selected units to <b>ENROUTE</b>.
+                </p>
               </div>
             </div>
           </div>
@@ -379,9 +405,5 @@ export const FieldHomeScreen: React.FC<FieldHomeScreenProps> = ({
     );
   }
 
-  // =========================
-  // Non-EMS view: keep your existing hardcoded DataContext flow for now
-  // =========================
-  // ... leave your current non-EMS logic unchanged
   return <div className="p-6">Non-EMS view (unchanged for MVP)</div>;
 };

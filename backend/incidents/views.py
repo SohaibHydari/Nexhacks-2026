@@ -52,15 +52,27 @@ def log_to_dict(le: LogEntry):
     }
 
 def change_unit_status(unit: Unit, new_status: str):
-    """Single source of truth for status changes + log."""
+    """Single source of truth for status changes + log + DB save."""
     old = unit.status
     if old == new_status:
         return False
 
     now = timezone.now()
     unit.status = new_status
-    unit.last_status_at = now
-    unit.save(update_fields=["status", "last_status_at", "updated_at"])
+
+    # If your Unit model has these fields, update them safely
+    update_fields = ["status"]
+
+    if hasattr(unit, "last_status_at"):
+        unit.last_status_at = now
+        update_fields.append("last_status_at")
+
+    # If your Unit model has auto_now updated_at, it only updates on save().
+    # If you use update_fields, include it so it's updated in the DB.
+    if hasattr(unit, "updated_at"):
+        update_fields.append("updated_at")
+
+    unit.save(update_fields=update_fields)
 
     LogEntry.objects.create(
         unit=unit,
@@ -68,6 +80,7 @@ def change_unit_status(unit: Unit, new_status: str):
         to_status=new_status,
     )
     return True
+
 
 
 # -----------------------
@@ -108,7 +121,6 @@ def unit_set_status(request, unit_id: int):
     except Unit.DoesNotExist:
         return JsonResponse({"error": "Unit not found"}, status=404)
 
-    # validate status is in choices
     valid_statuses = {c[0] for c in Unit.Status.choices}
     if new_status not in valid_statuses:
         return JsonResponse({"error": f"Invalid status. Use one of: {sorted(valid_statuses)}"}, status=400)
@@ -116,7 +128,9 @@ def unit_set_status(request, unit_id: int):
     with transaction.atomic():
         change_unit_status(unit, new_status)
 
+    # unit is now saved; returning is accurate
     return JsonResponse(unit_to_dict(unit))
+
 
 
 def requests_list(request):
@@ -229,7 +243,8 @@ def dispatch_request(request, request_id: int):
         else:
             rr.status = ResourceRequest.RequestStatus.PARTIAL
 
-        rr.save(update_fields=["status", "updated_at"] if hasattr(rr, "updated_at") else ["status"])
+        rr.save()  # <- simplest & safest (auto_now updated_at will update)
+
 
     return JsonResponse(request_to_dict(rr))
 
