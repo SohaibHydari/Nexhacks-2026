@@ -69,8 +69,11 @@ export const ICDashboard: React.FC = () => {
     disasterType: 'Fire',
     subCategory: PREDICTION_SUBCATEGORIES['Fire'][0],
   });
+  
   const [predicted, setPredicted] = useState<{ engines: number; ambulances: number } | null>(null);
-
+  const [predictionLoading, setPredictionLoading] = useState(false);
+  const [predictionError, setPredictionError] = useState<string | null>(null);
+  
   // Submit request manual inputs
   const [reqEngines, setReqEngines] = useState(0);
   const [reqAmbulances, setReqAmbulances] = useState(0);
@@ -117,14 +120,45 @@ export const ICDashboard: React.FC = () => {
   };
 
 
-  // Simple mock prediction
-  const runPrediction = () => {
-    const pc = Number(predictionInput.patientCount || 0);
-    const dt = predictionInput.disasterType;
-    const baseEngines = Math.ceil(pc / 10);
-    const engines = Math.max(1, Math.min(12, baseEngines + (dt === 'Fire' ? 2 : 0)));
-    const ambulances = Math.max(1, Math.min(20, Math.ceil(pc / 5)));
-    setPredicted({ engines, ambulances });
+    const runPrediction = async () => {
+    setPredictionLoading(true);
+    setPredictionError(null);
+    try {
+      const incidentPayload = {
+        incident_category: predictionInput.disasterType,
+        incident_subtype: predictionInput.subCategory,
+        city: predictionInput.location,
+        state: '',
+        population_affected_est: predictionInput.patientCount,
+        injuries_est: predictionInput.patientCount,
+        structures_threatened: predictionInput.buildings,
+        start_time: new Date().toISOString(),
+      };
+      const response = await fetch('/api/initial-prediction/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ incident: incidentPayload }),
+      });
+      if (!response.ok) {
+        throw new Error('Prediction request failed.');
+      }
+      const data = await response.json();
+      const engines = Math.max(0, Math.round(data.prediction?.firetrucks_dispatched_engines ?? 0));
+      const ambulances = Math.max(0, Math.round(data.prediction?.ambulances_dispatched ?? 0));
+      setPredicted({ engines, ambulances });
+    } catch (error) {
+      setPredicted(null);
+      setPredictionError(error instanceof Error ? error.message : 'Unable to run prediction.');
+    } finally {
+      setPredictionLoading(false);
+    }
+  };
+
+  const handleInitialPredictionClick = () => {
+    setShowPredictionModal(true);
+    runPrediction();
   };
 
   const handleSubmitRequest = (fromPrediction = false) => {

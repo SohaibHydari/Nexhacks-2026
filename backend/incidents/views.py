@@ -1,8 +1,11 @@
 import json
+import importlib.util
 from django.http import JsonResponse, HttpResponseNotAllowed
 from django.views.decorators.csrf import csrf_exempt
 from django.db import transaction
 from django.utils import timezone
+from functools import lru_cache
+from pathlib import Path
 
 from .models import Unit, ResourceRequest, RequestAssignment, LogEntry
 
@@ -244,3 +247,8 @@ def logs_list(request):
             pass
 
     return JsonResponse([log_to_dict(le) for le in qs], safe=False)
+
+# -----------------------
+# ML Logic
+# -----------------------
+
