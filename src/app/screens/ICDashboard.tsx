@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useData, Request } from '@/app/contexts/DataContext';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { DataTable, Column } from '@/app/components/ics/DataTable';
@@ -6,16 +6,28 @@ import { StatusPill } from '@/app/components/ics/StatusPill';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
-import { cn } from "@/lib/utils";
 
-
-import { AlertTriangle, RotateCcw } from 'lucide-react';
+import { TrendingUp, Bell, AlertTriangle } from 'lucide-react';
 
 import { RequestDetailDrawer } from './RequestDetailDrawer';
 
 
 const _env = ((import.meta as unknown) as { env: Record<string, string | undefined> }).env;
+const API_BASE = (_env.VITE_API_BASE ?? 'http://localhost:8000/api').replace(/\/$/, '');
 const PREDICTION_API_BASE = (_env.VITE_API_BASE ?? '').replace(/\/$/, '');
+
+async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    ...options,
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Request failed: ${res.status}`);
+  }
+  return res.json();
+}
 
 
 const PREDICTION_SUBCATEGORIES: Record<string, string[]> = {
@@ -45,79 +57,133 @@ const PREDICTION_SUBCATEGORIES: Record<string, string[]> = {
  Infrastructure: ['Water Main Break', 'Bridge Collapse', 'Cyber Outage', 'Damaged Gas Line', 'Power Outage'],
 };
 
+// --------------------
+// DB types (Django)
+// --------------------
+type UnitTypeCode = 'AMB' | 'ENG';
+type UnitStatusCode = 'AVAILABLE' | 'ENROUTE' | 'ON_SCENE' | 'TRANSPORTING';
+
+type ApiUnit = {
+  id: number;
+  name: string;
+  unit_type: UnitTypeCode;
+  status: UnitStatusCode;
+};
+
+type UiUnitStatus = 'Transporting' | 'In Transit' | 'On Scene';
+type UiUnitType = 'Fire Engine' | 'Ambulance';
+
+type UiUnitRow = {
+  id: string;
+  unitType: UiUnitType;
+  status: UiUnitStatus;
+  assignedTo?: string;
+  depleted?: boolean;
+  _dbId: number;
+  _dbStatus: UnitStatusCode;
+  _dbType: UnitTypeCode;
+  _dbName: string;
+};
+
+function dbUnitToUiRow(u: ApiUnit): UiUnitRow {
+  const uiType: UiUnitType = u.unit_type === 'ENG' ? 'Fire Engine' : 'Ambulance';
+  const uiId = u.unit_type === 'ENG' ? `ENG-${u.id}` : `AMB-${u.id}`;
+  const uiStatus: UiUnitStatus = u.status === 'ON_SCENE' ? 'On Scene' : u.status === 'TRANSPORTING' ? 'Transporting' : 'In Transit';
+
+  return {
+    id: uiId,
+    unitType: uiType,
+    status: uiStatus,
+    _dbId: u.id,
+    _dbStatus: u.status,
+    _dbType: u.unit_type,
+    _dbName: u.name,
+  };
+}
+
 
 
 
 
 
 export const ICDashboard: React.FC = () => {
- const { requests, addRequest, logEvent } = useData();
- const { user, incident } = useAuth();
- const [selectedRequest, setSelectedRequest] = useState<Request | null>(null);
+  const { requests, addRequest, logEvent } = useData();
+  const { user, incident } = useAuth();
+  const [selectedRequest, setSelectedRequest] = useState<Request | null>(null);
 
+  const [dbUnits, setDbUnits] = useState<ApiUnit[]>([]);
+  const [unitsLoading, setUnitsLoading] = useState(true);
+  const [unitsErr, setUnitsErr] = useState<string | null>(null);
 
- // Units state
- type UnitStatus = 'Transporting' | 'In Transit' | 'On Scene';
- interface Unit {
-   id: string;
-   unitType: 'Fire Engine' | 'Ambulance';
-   status: UnitStatus;
-   assignedTo?: string;
-   depleted?: boolean;
- }
+  const [lowDispatch, setLowDispatch] = useState<{ low: boolean; warning: string } | null>(null);
+  const [lowDispatchLoading, setLowDispatchLoading] = useState(false);
+  const [lowDispatchError, setLowDispatchError] = useState<string | null>(null);
 
+  const refreshUnits = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent ?? false;
+    if (!silent) setUnitsLoading(true);
 
- const [units, setUnits] = useState<Unit[]>([
-   { id: 'ENG-1', unitType: 'Fire Engine', status: 'On Scene' },
-   { id: 'ENG-2', unitType: 'Fire Engine', status: 'On Scene' },
-   { id: 'AMB-1', unitType: 'Ambulance', status: 'In Transit' },
-   { id: 'AMB-2', unitType: 'Ambulance', status: 'In Transit' },
- ]);
+    try {
+      const u = await api<ApiUnit[]>('/units/');
+      setDbUnits(u);
+      setUnitsErr(null);
+    } catch (e: any) {
+      setUnitsErr(e?.message ?? 'Failed to load units');
+    } finally {
+      if (!silent) setUnitsLoading(false);
+    }
+  }, []);
 
-const [lowDispatch, setLowDispatch] = useState<{ low: boolean; warning: string } | null>(null);
-const [lowDispatchLoading, setLowDispatchLoading] = useState(false);
-const [lowDispatchError, setLowDispatchError] = useState<string | null>(null);
+  useEffect(() => {
+    refreshUnits({ silent: false });
+    const t = window.setInterval(() => refreshUnits({ silent: true }).catch(() => {}), 1500);
+    return () => window.clearInterval(t);
+  }, [refreshUnits]);
 
-const fetchLowDispatchAlert = async () => {
-  setLowDispatchLoading(true);
-  setLowDispatchError(null);
+  const units: UiUnitRow[] = useMemo(() => {
+    const relevant = dbUnits.filter((u) => u.status === 'ENROUTE' || u.status === 'ON_SCENE');
+    return relevant.map(dbUnitToUiRow);
+  }, [dbUnits]);
 
-  try {
-    const res = await fetch(`${PREDICTION_API_BASE}/monitor/ambulances/low/`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    });
+  const fetchLowDispatchAlert = async () => {
+    setLowDispatchLoading(true);
+    setLowDispatchError(null);
 
-    if (!res.ok) throw new Error(`Low dispatch check failed (${res.status})`);
+    try {
+      const res = await fetch(`${PREDICTION_API_BASE}/monitor/ambulances/low/`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
 
-    const data = await res.json();
-    setLowDispatch({
-      low: Boolean(data.low_ambulances),
-      warning: String(data.warning ?? ''),
-    });
-  } catch (e) {
-    setLowDispatch(null);
-    setLowDispatchError(e instanceof Error ? e.message : 'Failed to load low dispatch alert.');
-  } finally {
-    setLowDispatchLoading(false);
-  }
-};
+      if (!res.ok) throw new Error(`Low dispatch check failed (${res.status})`);
 
-useEffect(() => {
-  fetchLowDispatchAlert();
-  const id = window.setInterval(fetchLowDispatchAlert, 30000); // refresh every 30s
-  return () => window.clearInterval(id);
-}, []);
+      const data = await res.json();
+      setLowDispatch({
+        low: Boolean(data.low_ambulances),
+        warning: String(data.warning ?? ''),
+      });
+    } catch (e) {
+      setLowDispatch(null);
+      setLowDispatchError(e instanceof Error ? e.message : 'Failed to load low dispatch alert.');
+    } finally {
+      setLowDispatchLoading(false);
+    }
+  };
 
- // Prediction modal state & inputs
- const [showPredictionModal, setShowPredictionModal] = useState(false);
- const [predictionInput, setPredictionInput] = useState({
-   location: '',
-   buildings: 0,
-   patientCount: 0,
-   disasterType: 'Fire',
-   subCategory: PREDICTION_SUBCATEGORIES['Fire'][0],
- });
+  useEffect(() => {
+    fetchLowDispatchAlert();
+    const id = window.setInterval(fetchLowDispatchAlert, 30000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const [showPredictionModal, setShowPredictionModal] = useState(false);
+  const [predictionInput, setPredictionInput] = useState({
+    location: '',
+    buildings: 0,
+    patientCount: 0,
+    disasterType: 'Fire',
+    subCategory: PREDICTION_SUBCATEGORIES['Fire'][0],
+  });
 
 
  const [predicted, setPredicted] = useState<{ engines: number; ambulances: number } | null>(null);
@@ -126,152 +192,220 @@ useEffect(() => {
 
 
  // Submit request manual inputs
- const [reqEngines, setReqEngines] = useState(0);
- const [reqAmbulances, setReqAmbulances] = useState(0);
+  const [reqEngines, setReqEngines] = useState(0);
+  const [reqAmbulances, setReqAmbulances] = useState(0);
+  const [reqLocation, setReqLocation] = useState('');
+  const [reqPriority, setReqPriority] = useState<'Low' | 'Medium' | 'High'>('High');
 
 
  // Units table columns (reuse DataTable)
- const unitColumns: Column[] = [
-   { key: 'id', label: 'Unit ID' },
-   { key: 'unitType', label: 'Type' },
-   { key: 'status', label: 'Status', render: (v: any) => <StatusPill status={v as any} /> },
-   { key: 'assignedTo', label: 'Assigned' },
-   {
-     key: 'actions',
-     label: 'Actions',
-     render: (_: any, row: any) => (
-       <div className="flex gap-2">
-         {row.status === 'In Transit' && (
-           <>
-             <Button size="sm" onClick={() => handleMarkOnScene(row.id)}>Mark On Scene</Button>
-           </>
-         )}
-         {row.status === 'On Scene' && (
-           <Button size="sm" variant="destructive" onClick={() => handleLeftScene(row.id)}>Transporting</Button>
-         )}
-       </div>
-     ),
-   },
- ];
+  const unitColumns: Column[] = [
+    { key: 'id', label: 'Unit ID' },
+    { key: 'unitType', label: 'Type' },
+    { key: 'status', label: 'Status', render: (v: any) => <StatusPill status={v as any} /> },
+    { key: 'assignedTo', label: 'Assigned' },
+    {
+      key: 'actions',
+      label: 'Actions',
+      render: (_: any, row: UiUnitRow) => (
+        <div className="flex gap-2">
+          {row.status === 'In Transit' && (
+            <Button size="sm" onClick={() => handleMarkOnScene(row._dbId)}>
+              Mark On Scene
+            </Button>
+          )}
+          {row.status === 'On Scene' && (
+            <Button size="sm" variant="destructive" onClick={() => handleTransporting(row._dbId)}>
+              Transporting
+            </Button>
+          )}
+        </div>
+      ),
+    },
+  ];
 
 
- const handleMarkOnScene = (unitId: string) => {
-   setUnits(prev => prev.map(u => (u.id === unitId ? { ...u, status: 'On Scene' } : u)));
-   logEvent({
-     actor: user?.name || 'IC',
-     action: 'Unit On Scene',
-     entityType: 'Unit',
-     entityId: unitId,
-     payload: {},
-   });
- };
+  const handleMarkOnScene = async (dbUnitId: number) => {
+    try {
+      await api(`/units/${dbUnitId}/status/`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'ON_SCENE' }),
+      });
+      await refreshUnits();
+
+      logEvent({
+        actor: user?.name || 'IC',
+        action: 'Unit On Scene',
+        entityType: 'Unit',
+        entityId: String(dbUnitId),
+        payload: { to_status: 'ON_SCENE' },
+      });
+    } catch (e: any) {
+      alert(e?.message ?? 'Failed to update unit status');
+    }
+  };
 
 
- const handleLeftScene = (unitId: string) => {
-   setUnits(prev => prev.filter(u => u.id !== unitId));
-   logEvent({
-     actor: user?.name || 'IC',
-     action: 'Unit Left Scene',
-     entityType: 'Unit',
-     entityId: unitId,
-     payload: {},
-   });
- };
+  const handleTransporting = async (dbUnitId: number) => {
+    try {
+      await api(`/units/${dbUnitId}/status/`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'TRANSPORTING' }),
+      });
+      await refreshUnits();
+
+      logEvent({
+        actor: user?.name || 'IC',
+        action: 'Unit Transporting',
+        entityType: 'Unit',
+        entityId: String(dbUnitId),
+        payload: { to_status: 'TRANSPORTING' },
+      });
+    } catch (e: any) {
+      alert(e?.message ?? 'Failed to update unit status');
+    }
+  };
 
 
- const runPrediction = async () => {
-   setPredictionLoading(true);
-   setPredictionError(null);
-   try {
-     const incidentPayload = {
-       incident_category: predictionInput.disasterType,
-       incident_subtype: predictionInput.subCategory,
-       city: predictionInput.location,
-       state: '',
-       population_affected_est: predictionInput.patientCount,
-       injuries_est: predictionInput.patientCount,
-       structures_threatened: predictionInput.buildings,
-       structures_damaged: predictionInput.buildings,
-       start_time: new Date().toISOString(),
-     };
+  const runPrediction = async () => {
+    setPredictionLoading(true);
+    setPredictionError(null);
+    try {
+      const incidentPayload = {
+        incident_category: predictionInput.disasterType,
+        incident_subtype: predictionInput.subCategory,
+        city: predictionInput.location,
+        state: '',
+        population_affected_est: predictionInput.patientCount,
+        injuries_est: predictionInput.patientCount,
+        structures_threatened: predictionInput.buildings,
+        structures_damaged: predictionInput.buildings,
+        start_time: new Date().toISOString(),
+      };
 
+      const response = await fetch(`${PREDICTION_API_BASE}/api/initial-prediction/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ incident: incidentPayload }),
+      });
 
- const response = await fetch(`${PREDICTION_API_BASE}/api/initial-prediction/`, {
-       method: 'POST',
-       headers: { 'Content-Type': 'application/json' },
-       body: JSON.stringify({ incident: incidentPayload }),
-     });
+      if (!response.ok) throw new Error('Prediction request failed.');
 
+      const data = await response.json();
+      const engines = Math.max(0, Math.round(data.prediction?.firetrucks_dispatched_engines ?? 0));
+      const ambulances = Math.max(0, Math.round(data.prediction?.ambulances_dispatched ?? 0));
+      setPredicted({ engines, ambulances });
 
-     if (!response.ok) throw new Error('Prediction request failed.');
+      if (!reqLocation.trim() && predictionInput.location.trim()) {
+        setReqLocation(predictionInput.location.trim());
+      }
+    } catch (error) {
+      setPredicted(null);
+      setPredictionError(error instanceof Error ? error.message : 'Unable to run prediction.');
+    } finally {
+      setPredictionLoading(false);
+    }
+  };
 
+  const submitToDatabase = async (engines: number, ambulances: number) => {
+    const calls: Promise<any>[] = [];
+    const location = reqLocation.trim() || predictionInput.location?.trim() || 'Unknown';
+    const priority = reqPriority || 'Medium';
 
-     const data = await response.json();
-     const engines = Math.max(0, Math.round(data.prediction?.firetrucks_dispatched_engines ?? 0));
-     const ambulances = Math.max(0, Math.round(data.prediction?.ambulances_dispatched ?? 0));
-     setPredicted({ engines, ambulances });
-   } catch (error) {
-     setPredicted(null);
-     setPredictionError(error instanceof Error ? error.message : 'Unable to run prediction.');
-   } finally {
-     setPredictionLoading(false);
-   }
- };
+    if (ambulances > 0) {
+      calls.push(
+        api('/requests/create/', {
+          method: 'POST',
+          body: JSON.stringify({
+            unit_type: 'AMB',
+            quantity: ambulances,
+            priority,
+            location,
+          }),
+        })
+      );
+    }
 
+    if (engines > 0) {
+      calls.push(
+        api('/requests/create/', {
+          method: 'POST',
+          body: JSON.stringify({
+            unit_type: 'ENG',
+            quantity: engines,
+            priority,
+            location,
+          }),
+        })
+      );
+    }
 
- const handleSubmitRequest = (fromPrediction = false) => {
-   if (!incident || !user) return;
+    if (calls.length === 0) return;
+    await Promise.all(calls);
+  };
 
+  const handleSubmitRequest = async (fromPrediction = false) => {
+    if (!incident || !user) return;
 
-   const engines = fromPrediction && predicted ? predicted.engines : reqEngines;
-   const ambulances = fromPrediction && predicted ? predicted.ambulances : reqAmbulances;
+    const engines = fromPrediction && predicted ? predicted.engines : reqEngines;
+    const ambulances = fromPrediction && predicted ? predicted.ambulances : reqAmbulances;
 
+    const finalLocation = reqLocation.trim() || predictionInput.location?.trim() || 'Unknown';
+    const finalPriority = reqPriority || 'Medium';
 
-   const resources = [] as any[];
-   if (ambulances > 0) resources.push({ id: `RL-A-${Date.now()}`, resourceType: 'Ambulances', qtyRequested: ambulances });
-   if (engines > 0) resources.push({ id: `RL-E-${Date.now()}`, resourceType: 'Fire Engines', qtyRequested: engines });
+    try {
+      await submitToDatabase(engines, ambulances);
 
+      const resources = [] as any[];
+      if (ambulances > 0) resources.push({ id: `RL-A-${Date.now()}`, resourceType: 'Ambulances', qtyRequested: ambulances });
+      if (engines > 0) resources.push({ id: `RL-E-${Date.now()}`, resourceType: 'Fire Engines', qtyRequested: engines });
 
-   addRequest({
-     incidentId: incident.id,
-     requesterId: user.id,
-     requesterName: user.name,
-     requesterOrg: user.role,
-     priority: 'High',
-     status: 'Submitted',
-     neededBy: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-     location: predictionInput.location || 'Unknown',
-     justification: fromPrediction
-       ? `Auto-generated: ${predictionInput.disasterType} / ${predictionInput.subCategory}`
-       : 'Manual request from IC',
-     patientImpact: String(predictionInput.patientCount || ''),
-     resources,
-   });
+      addRequest({
+        incidentId: incident.id,
+        requesterId: user.id,
+        requesterName: user.name,
+        requesterOrg: user.role,
+        priority: finalPriority,
+        status: 'Submitted',
+        neededBy: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        location: finalLocation,
+        justification: fromPrediction
+          ? `Auto-generated: ${predictionInput.disasterType} / ${predictionInput.subCategory}`
+          : 'Manual request from IC',
+        patientImpact: String(predictionInput.patientCount || ''),
+        resources,
+      });
 
+      logEvent({
+        actor: user.name,
+        action: 'Submitted Request (DB)',
+        entityType: 'ResourceRequest',
+        entityId: 'created',
+        payload: { engines, ambulances, location: finalLocation, priority: finalPriority },
+      });
 
-   logEvent({
-     actor: user.name,
-     action: 'Submitted Request',
-     entityType: 'Request',
-     entityId: 'TBD',
-     payload: { engines, ambulances },
-   });
+      setShowPredictionModal(false);
+      setPredicted(null);
+      setReqAmbulances(0);
+      setReqEngines(0);
+      setReqLocation('');
+      setReqPriority('High');
+    } catch (err) {
+      console.error(err);
+      alert(err instanceof Error ? err.message : 'Failed to submit request');
+    }
+  };
 
+  const populateRequestFromPrediction = () => {
+    if (!predicted) return;
+    setReqEngines(predicted.engines);
+    setReqAmbulances(predicted.ambulances);
 
-   setShowPredictionModal(false);
-   setPredicted(null);
-   setReqAmbulances(0);
-   setReqEngines(0);
- };
+    if (predictionInput.location.trim()) setReqLocation(predictionInput.location.trim());
 
-
- const populateRequestFromPrediction = () => {
-   if (!predicted) return;
-   setReqEngines(predicted.engines);
-   setReqAmbulances(predicted.ambulances);
-   setShowPredictionModal(false);
-   setPredicted(null);
- };
+    setShowPredictionModal(false);
+    setPredicted(null);
+  };
 
 
 
