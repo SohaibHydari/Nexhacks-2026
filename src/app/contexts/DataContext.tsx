@@ -186,7 +186,6 @@ const initialUnits: Unit[] = [
 const initialIncidents: Incident[] = [
   { id:'INC-001', name:'Wildfire - Cedar Ridge', type:'Wildfire', severity:'Critical', status:'Active', startTime:'2026-01-17T06:00:00' },
   { id:'INC-002', name:'Mass Casualty - Highway 101', type:'MCI', severity:'High', status:'Active', startTime:'2026-01-17T09:30:00' },
-  { id:'INC-003', name:'Flood Response - Downtown', type:'Flood', severity:'Medium', status:'Monitoring', startTime:'2026-01-16T14:00:00' },
 ];
 
 
