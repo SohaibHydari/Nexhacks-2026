@@ -14,7 +14,13 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()  # loads backend/.env
+#load_dotenv()  # loads backend/.env
+
+# Build paths inside the project like this: BASE_DIR / 'subdir'.
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+load_dotenv(BASE_DIR / ".env")  # always loads backend/.env no matter where you run from
+
 
 DATABASES = {
     "default": {

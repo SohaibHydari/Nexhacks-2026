@@ -11,6 +11,35 @@ interface IncidentSelectScreenProps {
   onSelect: () => void;
 }
 
+const PREDICTION_SUBCATEGORIES: Record<string, string[]> = {
+  Fire: [
+    'Structure Fire',
+    'Brush Fire',
+    'Warehouse Fire',
+    'Industrial Fire',
+    'High-Rise Fire',
+    'Hazmat Fire',
+    'Vehicle Fire',
+    'Wildland Fire',
+  ],
+  'Public Health': ['Disease Outbreak', 'Heat Illness Surge', 'Hospital Surge', 'Mass Casualty'],
+  Weather: [
+    'Ice Storm',
+    'Heatwave',
+    'Severe Thunderstorm',
+    'Tropical Storm',
+    'Tornado',
+    'Flash Flood',
+    'Blizzard',
+    'River Flood',
+    'Extreme Cold',
+    'Hurricane',
+  ],
+  Infrastructure: ['Water Main Break', 'Bridge Collapse', 'Cyber Outage', 'Damaged Gas Line', 'Power Outage'],
+};
+
+const INCIDENT_CATEGORIES = Object.keys(PREDICTION_SUBCATEGORIES);
+
 export const IncidentSelectScreen: React.FC<IncidentSelectScreenProps> = ({ onSelect }) => {
   const { selectIncident } = useAuth();
   const { incidents, addIncident } = useData();
@@ -20,9 +49,14 @@ export const IncidentSelectScreen: React.FC<IncidentSelectScreenProps> = ({ onSe
 
   // Create incident modal state
   const [createOpen, setCreateOpen] = useState(false);
+
+  const defaultCategory = INCIDENT_CATEGORIES[0];
+  const defaultSubcategory = PREDICTION_SUBCATEGORIES[defaultCategory][0];
+
   const [newIncident, setNewIncident] = useState({
     name: '',
-    type: 'Wildfire',
+    category: defaultCategory,
+    subcategory: defaultSubcategory,
     severity: 'Medium',
     status: 'Active',
   });
@@ -77,13 +111,19 @@ export const IncidentSelectScreen: React.FC<IncidentSelectScreenProps> = ({ onSe
 
     addIncident({
       name: newIncident.name.trim(),
-      type: newIncident.type,
+      type: newIncident.subcategory, // ✅ store the subcategory as "type"
       severity: newIncident.severity as any,
       status: newIncident.status as any,
     });
 
     // reset + close
-    setNewIncident({ name: '', type: 'Wildfire', severity: 'Medium', status: 'Active' });
+    setNewIncident({
+      name: '',
+      category: defaultCategory,
+      subcategory: defaultSubcategory,
+      severity: 'Medium',
+      status: 'Active',
+    });
     setCreateOpen(false);
   };
 
@@ -155,27 +195,53 @@ export const IncidentSelectScreen: React.FC<IncidentSelectScreenProps> = ({ onSe
                   className="w-full border rounded-lg p-2 text-sm"
                   value={newIncident.name}
                   onChange={(e) => setNewIncident((prev) => ({ ...prev, name: e.target.value }))}
-                  placeholder="e.g., Wildfire - Cedar Ridge"
+                  placeholder="e.g., Cedar Ridge Response"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <div className="text-sm font-medium mb-1">Type</div>
+                  <div className="text-sm font-medium mb-1">Category</div>
                   <select
                     className="w-full border rounded-lg p-2 text-sm"
-                    value={newIncident.type}
-                    onChange={(e) => setNewIncident((prev) => ({ ...prev, type: e.target.value }))}
+                    value={newIncident.category}
+                    onChange={(e) => {
+                      const category = e.target.value;
+                      const firstSub = PREDICTION_SUBCATEGORIES[category]?.[0] ?? '';
+                      setNewIncident((prev) => ({
+                        ...prev,
+                        category,
+                        subcategory: firstSub,
+                      }));
+                    }}
                   >
-                    <option>Wildfire</option>
-                    <option>MCI</option>
-                    <option>Flood</option>
-                    <option>Hazmat</option>
-                    <option>Storm</option>
-                    <option>Other</option>
+                    {INCIDENT_CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
+                <div>
+                  <div className="text-sm font-medium mb-1">Type</div>
+                  <select
+                    className="w-full border rounded-lg p-2 text-sm"
+                    value={newIncident.subcategory}
+                    onChange={(e) =>
+                      setNewIncident((prev) => ({ ...prev, subcategory: e.target.value }))
+                    }
+                  >
+                    {PREDICTION_SUBCATEGORIES[newIncident.category].map((sub) => (
+                      <option key={sub} value={sub}>
+                        {sub}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <div className="text-sm font-medium mb-1">Severity</div>
                   <select
@@ -191,19 +257,19 @@ export const IncidentSelectScreen: React.FC<IncidentSelectScreenProps> = ({ onSe
                     <option>Critical</option>
                   </select>
                 </div>
-              </div>
 
-              <div>
-                <div className="text-sm font-medium mb-1">Status</div>
-                <select
-                  className="w-full border rounded-lg p-2 text-sm"
-                  value={newIncident.status}
-                  onChange={(e) => setNewIncident((prev) => ({ ...prev, status: e.target.value }))}
-                >
-                  <option>Active</option>
-                  <option>Monitoring</option>
-                  <option>Closed</option>
-                </select>
+                <div>
+                  <div className="text-sm font-medium mb-1">Status</div>
+                  <select
+                    className="w-full border rounded-lg p-2 text-sm"
+                    value={newIncident.status}
+                    onChange={(e) => setNewIncident((prev) => ({ ...prev, status: e.target.value }))}
+                  >
+                    <option>Active</option>
+                    <option>Monitoring</option>
+                    <option>Closed</option>
+                  </select>
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
