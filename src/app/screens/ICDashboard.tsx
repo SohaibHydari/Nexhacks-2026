@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/ca
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 
-import { TrendingUp, Bell } from 'lucide-react';
+import {  Bell, AlertTriangle, RotateCcw} from 'lucide-react';
 import { RequestDetailDrawer } from './RequestDetailDrawer';
 
 const _env = ((import.meta as unknown) as { env: Record<string, string | undefined> }).env;
@@ -152,6 +152,7 @@ export const ICDashboard: React.FC = () => {
     const t = setInterval(() => refreshUnits({ silent: true }).catch(() => {}), 1500);
     return () => clearInterval(t);
   }, [refreshUnits]);
+  
 
 
   // Only show ENROUTE + ON_SCENE + TRANSPORTING in the IC table
@@ -183,6 +184,44 @@ export const ICDashboard: React.FC = () => {
   // ✅ manual request fields
   const [reqLocation, setReqLocation] = useState('');
   const [reqPriority, setReqPriority] = useState<'Low' | 'Medium' | 'High'>('High');
+  // --------------------
+// Low Dispatch Alert
+// --------------------
+const [lowDispatch, setLowDispatch] = useState<{ low: boolean; warning: string } | null>(null);
+const [lowDispatchLoading, setLowDispatchLoading] = useState(false);
+const [lowDispatchError, setLowDispatchError] = useState<string | null>(null);
+
+const fetchLowDispatchAlert = useCallback(async () => {
+  setLowDispatchLoading(true);
+  setLowDispatchError(null);
+
+  try {
+    const res = await fetch(`${API_BASE}/monitor/ambulances/low/`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (!res.ok) throw new Error(`Low dispatch check failed (${res.status})`);
+
+    const data = await res.json();
+    setLowDispatch({
+      low: Boolean(data.low_ambulances),
+      warning: String(data.warning ?? ''),
+    });
+  } catch (e) {
+    setLowDispatch(null);
+    setLowDispatchError(e instanceof Error ? e.message : 'Failed to load low dispatch alert.');
+  } finally {
+    setLowDispatchLoading(false);
+  }
+}, []);
+
+  
+  useEffect(() => {
+  fetchLowDispatchAlert();
+  const id = window.setInterval(fetchLowDispatchAlert, 30000); // every 30s
+  return () => window.clearInterval(id);
+  }, [fetchLowDispatchAlert]);
 
   // Units table columns (reuse DataTable)
   const unitColumns: Column[] = [
@@ -397,8 +436,7 @@ export const ICDashboard: React.FC = () => {
     setPredicted(null);
   };
 
-  const outlierRequests = requests.filter((r: Request) => r.varianceFlag && r.varianceFlag !== 'OK').slice(0, 5);
-
+ 
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-start justify-between gap-4">
@@ -497,56 +535,86 @@ export const ICDashboard: React.FC = () => {
         </div>
 
         <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-4 w-4" />
-                Prediction Outliers
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {outlierRequests.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No outliers detected</p>
-              ) : (
-                <div className="space-y-3">
-                  {outlierRequests.map((req: Request) => (
-                    <div
-                      key={req.id}
-                      className="p-3 border rounded-lg hover:bg-accent cursor-pointer transition-colors"
-                      onClick={() => setSelectedRequest(req)}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1">
-                          <p className="font-medium text-sm">{req.id}</p>
-                          <p className="text-xs text-muted-foreground">{req.requesterOrg}</p>
-                        </div>
-                        <Badge
-                          variant={req.varianceFlag === 'Critical' ? 'destructive' : 'default'}
-                          className="text-xs"
-                        >
-                          {req.varianceFlag}
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Bell className="h-4 w-4" />
-                Recent Bulletins
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Button variant="outline" className="w-full">
-                Create Bulletin
-              </Button>
-            </CardContent>
-          </Card>
+          <Card className={lowDispatch?.low ? "border-destructive/40" : ""}>
+  <CardHeader className="pb-3">
+    <CardTitle className="flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <AlertTriangle className={lowDispatch?.low ? "h-5 w-5 text-destructive" : "h-5 w-5 text-muted-foreground"} />
+        <span className="tracking-tight">Low Dispatch Alert</span>
+
+        {lowDispatch && (
+          <Badge variant={lowDispatch.low ? "destructive" : "secondary"} className="ml-2">
+            {lowDispatch.low ? "Critical" : "Normal"}
+          </Badge>
+        )}
+      </div>
+
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={fetchLowDispatchAlert}
+        disabled={lowDispatchLoading}
+        className="gap-2"
+      >
+        <RotateCcw className="h-4 w-4" />
+        Refresh
+      </Button>
+    </CardTitle>
+  </CardHeader>
+
+  <CardContent className="space-y-3">
+    {lowDispatchLoading && (
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <span className="h-2 w-2 rounded-full bg-muted-foreground/60 animate-pulse" />
+        Checking ambulance availability…
+      </div>
+    )}
+
+    {lowDispatchError && (
+      <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+        {lowDispatchError}
+      </div>
+    )}
+
+    {!lowDispatchLoading && !lowDispatchError && lowDispatch && (
+      <>
+        <div className="flex items-center justify-between rounded-lg border bg-background/60 px-3 py-2">
+          <div className="flex items-center gap-2">
+            <div className={`h-2.5 w-2.5 rounded-full ${lowDispatch.low ? "bg-destructive" : "bg-muted-foreground"}`} />
+            <p className="text-sm font-medium">
+              Status:{" "}
+              <span className={lowDispatch.low ? "text-destructive" : "text-foreground"}>
+                {lowDispatch.low ? "LOW" : "OK"}
+              </span>
+            </p>
+          </div>
+
+          <p className="text-xs text-muted-foreground">Auto-refresh: 30s</p>
+        </div>
+
+        <div
+          className={`rounded-lg border p-3 text-sm leading-relaxed ${
+            lowDispatch.low ? "border-destructive/25 bg-destructive/5" : "border-border bg-muted/30"
+          }`}
+        >
+          <p className="font-medium mb-1">
+            {lowDispatch.low ? "Action recommended" : "No action needed"}
+          </p>
+          <p className="text-muted-foreground whitespace-pre-wrap">{lowDispatch.warning}</p>
+        </div>
+      </>
+    )}
+
+    {!lowDispatchLoading && !lowDispatchError && !lowDispatch && (
+      <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
+        No alert data available.
+      </div>
+    )}
+  </CardContent>
+</Card>
+
         </div>
       </div>
 
