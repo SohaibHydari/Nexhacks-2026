@@ -242,9 +242,8 @@ export const ICDashboard: React.FC = () => {
                   <Badge>{units.filter(u => u.status === 'On Scene').length} On Scene</Badge>
                 </div>
                 <div className="flex gap-2">
-                  <Button onClick={() => setShowPredictionModal(true)} disabled={units.length > 0}>
-                    Initial Prediction
-                  </Button>
+                  <Button onClick={handleInitialPredictionClick} disabled={units.length > 0}>Initial Prediction</Button>
+                  {/* <Button onClick={() => { setReqAmbulances(2); setReqEngines(2); }} variant="outline">Quick Request</Button> */}
                 </div>
               </div>
 
@@ -415,20 +414,23 @@ export const ICDashboard: React.FC = () => {
             </div>
 
             <div className="mt-4 flex justify-end gap-2">
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setShowPredictionModal(false);
-                  setPredicted(null);
-                }}
-              >
-                Cancel
-              </Button>
-              <Button onClick={runPrediction} disabled={predictionLoading}>
-                {predictionLoading ? 'Running...' : 'Run Prediction'}
-              </Button>
+              <Button 
+                variant="ghost" 
+                onClick={() => { 
+                  setShowPredictionModal(false); 
+                  setPredicted(null); 
+                  setPredictionError(null);
+                  }}
+                  >
+                    Cancel
+                  </Button>
+                <Button onClick={runPrediction} disabled={predictionLoading}>
+                  {predictionLoading ? 'Running...' : 'Run Prediction'}
+                </Button>
             </div>
-
+            {predictionError && (
+              <p className="mt-3 text-sm text-destructive">{predictionError}</p>
+            )}
             {predicted && (
               <div className="mt-4 border-t pt-4 space-y-2">
                 <p className="font-medium">Prediction Results</p>
