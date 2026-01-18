@@ -64,7 +64,7 @@ def forecast_ambulance_low(
     # update it here.
     sql = """
         SELECT COUNT(*) AS cnt
-        FROM "logEntry"
+        FROM incidents_logentry
         WHERE created_at >= %s
           AND from_status = %s
           AND to_status = %s
