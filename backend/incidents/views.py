@@ -5,9 +5,10 @@ from django.http import JsonResponse, HttpResponseNotAllowed
 from django.views.decorators.csrf import csrf_exempt
 from django.db import transaction
 from django.utils import timezone
-
+from django.views.decorators.http import require_GET
 from .models import Unit, ResourceRequest, RequestAssignment, LogEntry
 from initial_prediction_model.initial_resource_model import estimate_resources_with_gpt
+from low_alert_prediction_model.ambulance_forecast import forecast_ambulance_low
 
 # -----------------------
 # Helpers
@@ -76,7 +77,16 @@ def change_unit_status(unit: Unit, new_status: str):
     )
     return True
 
+@require_GET
+def ambulance_low_check(request):
+    low, warning = forecast_ambulance_low()
 
+    return JsonResponse(
+        {
+            "low_ambulances": low,
+            "warning": warning,
+        }
+    )
 
 # -----------------------
 # Endpoints
