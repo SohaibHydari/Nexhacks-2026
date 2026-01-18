@@ -105,7 +105,7 @@ export const FieldHomeScreen: React.FC<FieldHomeScreenProps> = ({
     try {
       const [u, r] = await Promise.all([
         api<ApiUnit[]>('/units/'),
-        api<ApiResourceRequest[]>('/requests/?unit_type=AMB&status=PENDING'),
+        api<ApiResourceRequest[]>('/requests/?status=PENDING'),
       ]);
       setUnits(u);
       setRequests(r);
@@ -125,9 +125,8 @@ export const FieldHomeScreen: React.FC<FieldHomeScreenProps> = ({
     return () => clearInterval(t);
   }, [isEMS, refresh]);
 
-  const emsUnits = useMemo(() => {
-    return (units || []).filter((u) => u.unit_type === 'AMB');
-  }, [units]);
+  const allUnits = useMemo(() => units || [], [units]);
+
 
   const unitCounts = useMemo(() => {
     const counts = {
@@ -136,19 +135,22 @@ export const FieldHomeScreen: React.FC<FieldHomeScreenProps> = ({
       'On Scene': 0,
       Transporting: 0,
     };
-    emsUnits.forEach((u) => {
+
+    allUnits.forEach((u) => {
       const label = STATUS_LABEL[u.status];
       if (label === 'Available') counts.Available += 1;
       if (label === 'Enroute') counts.Enroute += 1;
       if (label === 'On Scene') counts['On Scene'] += 1;
       if (label === 'Transporting') counts.Transporting += 1;
     });
+
     return counts;
-  }, [emsUnits]);
+  }, [allUnits]);
+
 
   const availableAmbulances = useMemo(() => {
-    return emsUnits.filter((u) => u.status === 'AVAILABLE');
-  }, [emsUnits]);
+    return allUnits.filter((u) => u.status === 'AVAILABLE');
+  }, [allUnits]);
 
   // ---- Respond modal state
   const [respondOpen, setRespondOpen] = useState(false);
@@ -223,12 +225,12 @@ export const FieldHomeScreen: React.FC<FieldHomeScreenProps> = ({
           <div className="lg:col-span-2 space-y-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>All Ambulance Units</CardTitle>
-                <Badge variant="outline">{emsUnits.length} Units</Badge>
+                <CardTitle>All Units</CardTitle>
+                <Badge variant="outline">{allUnits.length} Units</Badge>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {emsUnits.map((u) => (
+                  {allUnits.map((u) => (
                     <div
                       key={u.id}
                       className="flex items-center justify-between border rounded-lg p-3"
@@ -245,16 +247,6 @@ export const FieldHomeScreen: React.FC<FieldHomeScreenProps> = ({
                           {STATUS_LABEL[u.status]}
                         </Badge>
 
-                        <select
-                          className="border rounded-md px-2 py-1 text-sm"
-                          value={u.status}
-                          onChange={(e) => setUnitStatus(u.id, e.target.value as UnitStatusCode)}
-                        >
-                          <option value="AVAILABLE">Available</option>
-                          <option value="ENROUTE">Enroute</option>
-                          <option value="ON_SCENE">On Scene</option>
-                          <option value="TRANSPORTING">Transporting</option>
-                        </select>
                       </div>
                     </div>
                   ))}
