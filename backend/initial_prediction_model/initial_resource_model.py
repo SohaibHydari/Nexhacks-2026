@@ -2,16 +2,9 @@ import json
 import os
 import re
 from dotenv import load_dotenv
-from openai import OpenAI
 from mistralai import Mistral
 # Load environment variables from .env
 load_dotenv()
-
-# API_KEY = os.getenv("OPENAI_API_KEY")
-# if not API_KEY:
-#     raise RuntimeError("OPENAI_API_KEY not found in .env file")
-
-# client = OpenAI(api_key=API_KEY)
 
 api_key = os.getenv("MISTRAL_API_KEY")
 if not api_key:
