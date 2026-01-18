@@ -13,5 +13,5 @@ urlpatterns = [
     path("logs/", views.logs_list),
     path("api/initial-prediction/", views.initial_prediction),
 
-    path("monitor/ambulances/low", ambulance_low_check),
+    path("monitor/ambulances/low/", ambulance_low_check),
 ]
