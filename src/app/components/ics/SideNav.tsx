@@ -28,8 +28,6 @@ const navItemsByRole: Record<Role, NavItem[]> = {
   ],
   EMSFire: [
     { label: 'Field Home', icon: <MapPin className="h-4 w-4" />, path: '/field' },
-    { label: 'Create Request', icon: <PlusCircle className="h-4 w-4" />, path: '/create-request' },
-    { label: 'Bulletins', icon: <Bell className="h-4 w-4" />, path: '/bulletins' },
     { label: 'Event Log', icon: <ScrollText className="h-4 w-4" />, path: '/event-log' },
   ],
 };
