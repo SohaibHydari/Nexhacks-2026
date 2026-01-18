@@ -11,7 +11,7 @@ urlpatterns = [
     path("requests/<int:request_id>/dispatch/", views.dispatch_request),
 
     path("logs/", views.logs_list),
-    path("initial-prediction/", views.initial_prediction),
+    path("api/initial-prediction/", views.initial_prediction),
 
     path("monitor/ambulances/low", ambulance_low_check),
 ]
