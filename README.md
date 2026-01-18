@@ -4,7 +4,7 @@ Run `npm i` to install the dependencies.
 
 Run `npm run dev` to start the development server.
 
-# Incident Command Resource Management System
+# PRISM: Priority, Resource, Incident, Simulation, and Monitoring.
 
 ## Inspiration
 Emergency incidents are chaotic, time-critical, and resource-constrained. Incident Commanders are expected to make fast decisions with incomplete information, often relying on intuition and fragmented systems. This project was inspired by the question: **what if ICs had real-time visibility, historical context, and predictive support in one place?**
