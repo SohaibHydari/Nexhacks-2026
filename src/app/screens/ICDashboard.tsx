@@ -242,7 +242,8 @@ export const ICDashboard: React.FC = () => {
                   <Badge>{units.filter(u => u.status === 'On Scene').length} On Scene</Badge>
                 </div>
                 <div className="flex gap-2">
-                  <Button onClick={handleInitialPredictionClick} disabled={units.length > 0}>Initial Prediction</Button>
+                  <Button onClick={() => setShowPredictionModal(true)} disabled={units.length > 0}>Initial Prediction</Button>
+
                   {/* <Button onClick={() => { setReqAmbulances(2); setReqEngines(2); }} variant="outline">Quick Request</Button> */}
                 </div>
               </div>
