@@ -23,10 +23,10 @@ We learned how to design a backend system that prioritizes **auditability and sa
 
 ---
 
-## How I Built the Project
-I built the system using Django and PostgreSQL (Supabase). Resources are modeled as units with explicit status transitions, and every change is logged immutably. Historical incident data powers a K-Nearest Neighbors model to estimate resource needs, while recent status logs are used to forecast when ambulances will run critically low. The frontend polls lightweight JSON endpoints to surface warnings without automating decisions.
+## How we Built the Project
+We built the system using Django and PostgreSQL (Supabase). Resources are modeled as units with explicit status transitions, and every change is logged immutably. Historical incident data powers a K-Nearest Neighbors model to estimate resource needs, while recent status logs are used to forecast when ambulances will run critically low. The frontend polls lightweight JSON endpoints to surface warnings without automating decisions.
 
 ---
 
-## Challenges I Faced
+## Challenges we Faced
 The hardest part was ensuring **correctness under pressure**—preventing double dispatches, handling race conditions, and making sure forecasts were explainable and trustworthy. Balancing simplicity with realism was also challenging: the system needed to be useful without pretending to replace human judgment.
