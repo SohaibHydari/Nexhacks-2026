@@ -198,7 +198,7 @@ def dispatch_request(request, request_id: int):
     EMS responds:
     - creates RequestAssignment rows
     - updates units -> ENROUTE (and logs)
-    - updates request status -> COMPLETED or PARTIAL
+    - deletes the ResourceRequest + assignments after dispatch (cleanup)
     """
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -218,40 +218,44 @@ def dispatch_request(request, request_id: int):
         return JsonResponse({"error": "Request not found"}, status=404)
 
     with transaction.atomic():
-        # lock selected units so two clients don't double-dispatch same unit
+        # lock units so two clients don't double-dispatch same unit
         units = list(Unit.objects.select_for_update().filter(id__in=unit_ids))
 
         if len(units) != len(unit_ids):
             return JsonResponse({"error": "One or more unit_ids invalid"}, status=400)
 
-        # Optional: ensure units match requested type
+        # Ensure units match requested type + are available
         for u in units:
             if u.unit_type != rr.unit_type:
                 return JsonResponse({"error": f"Unit {u.id} type mismatch"}, status=400)
-
-        # Optional: ensure only AVAILABLE can be dispatched
-        for u in units:
             if u.status != Unit.Status.AVAILABLE:
                 return JsonResponse({"error": f"Unit {u.id} not available"}, status=400)
 
-        # create assignments
+        # Create assignments (optional, but fine to keep for audit during this transaction)
         for u in units:
             RequestAssignment.objects.get_or_create(request=rr, unit=u)
 
-        # status change + logs
+        # Status change + logs
         for u in units:
-            change_unit_status(u, Unit.Status.ENROUTE)
+            changed = change_unit_status(u, Unit.Status.ENROUTE)
+            if changed:
+                # IMPORTANT: actually persist unit status change
+                u.save(update_fields=["status", "updated_at"] if hasattr(u, "updated_at") else ["status"])
 
+        # Decide final request status (optional now, but harmless)
         assigned = rr.assignments.count()
         if assigned >= rr.quantity:
             rr.status = ResourceRequest.RequestStatus.COMPLETED
         else:
             rr.status = ResourceRequest.RequestStatus.PARTIAL
+        rr.save(update_fields=["status", "updated_at"] if hasattr(rr, "updated_at") else ["status"])
 
-        rr.save()  # <- simplest & safest (auto_now updated_at will update)
+        # ✅ Cleanup: delete assignments + request
+        # (If RequestAssignment has CASCADE from request, deleting rr will delete assignments automatically)
+        rr.delete()
 
+    return JsonResponse({"ok": True, "deleted_request_id": request_id})
 
-    return JsonResponse(request_to_dict(rr))
 
 
 def logs_list(request):

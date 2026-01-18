@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useData, Request } from '@/app/contexts/DataContext';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { DataTable, Column } from '@/app/components/ics/DataTable';
@@ -58,29 +58,111 @@ const PREDICTION_SUBCATEGORIES: Record<string, string[]> = {
   Infrastructure: ['Water Main Break', 'Bridge Collapse', 'Cyber Outage', 'Damaged Gas Line', 'Power Outage'],
 };
 
+// --------------------
+// DB types (Django)
+// --------------------
+type UnitTypeCode = 'AMB' | 'ENG';
+type UnitStatusCode = 'AVAILABLE' | 'ENROUTE' | 'ON_SCENE' | 'TRANSPORTING';
+
+type ApiUnit = {
+  id: number;              // Django PK
+  name: string;            // "Ambulance 3"
+  unit_type: UnitTypeCode; // "AMB"
+  status: UnitStatusCode;  // "AVAILABLE"
+};
+
+type UiUnitStatus = 'Transporting' | 'In Transit' | 'On Scene';
+type UiUnitType = 'Fire Engine' | 'Ambulance';
+
+type UiUnitRow = {
+  id: string; // ENG-3 / AMB-2 style for the UI table
+  unitType: UiUnitType;
+  status: UiUnitStatus;
+  assignedTo?: string;
+  depleted?: boolean;
+
+  // keep original DB reference if you ever need it
+  _dbId: number;
+  _dbStatus: UnitStatusCode;
+  _dbType: UnitTypeCode;
+  _dbName: string;
+};
+
+function dbUnitToUiRow(u: ApiUnit): UiUnitRow {
+  const uiType: UiUnitType = u.unit_type === 'ENG' ? 'Fire Engine' : 'Ambulance';
+
+  const uiId =
+    u.unit_type === 'ENG'
+      ? `ENG-${u.id}`
+      : `AMB-${u.id}`;
+
+  const uiStatus: UiUnitStatus =
+    u.status === 'ON_SCENE'
+      ? 'On Scene'
+      : u.status === 'TRANSPORTING'
+        ? 'Transporting'
+        : 'In Transit'; // ENROUTE (and even AVAILABLE) should not show in this IC table
+
+  return {
+    id: uiId,
+    unitType: uiType,
+    status: uiStatus,
+    _dbId: u.id,
+    _dbStatus: u.status,
+    _dbType: u.unit_type,
+    _dbName: u.name,
+  };
+}
+
 export const ICDashboard: React.FC = () => {
   const { requests, addRequest, logEvent } = useData();
   const { user, incident } = useAuth();
   const [selectedRequest, setSelectedRequest] = useState<Request | null>(null);
 
-  // Units state
-  type UnitStatus = 'Transporting' | 'In Transit' | 'On Scene';
-  interface Unit {
-    id: string;
-    unitType: 'Fire Engine' | 'Ambulance';
-    status: UnitStatus;
-    assignedTo?: string;
-    depleted?: boolean;
-  }
+  // --------------------
+  // ✅ Units come from DB now (not hardcoded)
+  // --------------------
+  const [dbUnits, setDbUnits] = useState<ApiUnit[]>([]);
+  const [unitsLoading, setUnitsLoading] = useState(true);
+  const [unitsErr, setUnitsErr] = useState<string | null>(null);
 
-  const [units, setUnits] = useState<Unit[]>([
-    { id: 'ENG-1', unitType: 'Fire Engine', status: 'On Scene' },
-    { id: 'ENG-2', unitType: 'Fire Engine', status: 'On Scene' },
-    { id: 'AMB-1', unitType: 'Ambulance', status: 'In Transit' },
-    { id: 'AMB-2', unitType: 'Ambulance', status: 'In Transit' },
-  ]);
+  const refreshUnits = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent ?? false;
 
+    // Only show loading spinner/disable on the first load (not on polling)
+    if (!silent) setUnitsLoading(true);
+
+    try {
+      const u = await api<ApiUnit[]>('/units/');
+      setDbUnits(u);
+      setUnitsErr(null);
+    } catch (e: any) {
+      setUnitsErr(e?.message ?? 'Failed to load units');
+    } finally {
+      if (!silent) setUnitsLoading(false);
+    }
+  }, []);
+
+
+  useEffect(() => {
+    // initial load (not silent)
+    refreshUnits({ silent: false });
+
+    // polling (silent)
+    const t = setInterval(() => refreshUnits({ silent: true }).catch(() => {}), 1500);
+    return () => clearInterval(t);
+  }, [refreshUnits]);
+
+
+  // Only show ENROUTE + ON_SCENE + TRANSPORTING in the IC table
+  const units: UiUnitRow[] = useMemo(() => {
+  const relevant = dbUnits.filter((u) => u.status === 'ENROUTE' || u.status === 'ON_SCENE');
+    return relevant.map(dbUnitToUiRow);
+  }, [dbUnits]);
+
+  // --------------------
   // Prediction modal state & inputs
+  // --------------------
   const [showPredictionModal, setShowPredictionModal] = useState(false);
   const [predictionInput, setPredictionInput] = useState({
     location: '',
@@ -98,7 +180,7 @@ export const ICDashboard: React.FC = () => {
   const [reqEngines, setReqEngines] = useState(0);
   const [reqAmbulances, setReqAmbulances] = useState(0);
 
-  // ✅ NEW: manual request fields
+  // ✅ manual request fields
   const [reqLocation, setReqLocation] = useState('');
   const [reqPriority, setReqPriority] = useState<'Low' | 'Medium' | 'High'>('High');
 
@@ -111,17 +193,15 @@ export const ICDashboard: React.FC = () => {
     {
       key: 'actions',
       label: 'Actions',
-      render: (_: any, row: any) => (
+      render: (_: any, row: UiUnitRow) => (
         <div className="flex gap-2">
           {row.status === 'In Transit' && (
-            <>
-              <Button size="sm" onClick={() => handleMarkOnScene(row.id)}>
-                Mark On Scene
-              </Button>
-            </>
+            <Button size="sm" onClick={() => handleMarkOnScene(row._dbId)}>
+              Mark On Scene
+            </Button>
           )}
           {row.status === 'On Scene' && (
-            <Button size="sm" variant="destructive" onClick={() => handleLeftScene(row.id)}>
+            <Button size="sm" variant="destructive" onClick={() => handleTransporting(row._dbId)}>
               Transporting
             </Button>
           )}
@@ -130,26 +210,45 @@ export const ICDashboard: React.FC = () => {
     },
   ];
 
-  const handleMarkOnScene = (unitId: string) => {
-    setUnits(prev => prev.map(u => (u.id === unitId ? { ...u, status: 'On Scene' } : u)));
-    logEvent({
-      actor: user?.name || 'IC',
-      action: 'Unit On Scene',
-      entityType: 'Unit',
-      entityId: unitId,
-      payload: {},
-    });
+  // ✅ IC status updates now update DB
+  const handleMarkOnScene = async (dbUnitId: number) => {
+    try {
+      await api(`/units/${dbUnitId}/status/`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'ON_SCENE' }),
+      });
+      await refreshUnits();
+
+      logEvent({
+        actor: user?.name || 'IC',
+        action: 'Unit On Scene',
+        entityType: 'Unit',
+        entityId: String(dbUnitId),
+        payload: { to_status: 'ON_SCENE' },
+      });
+    } catch (e: any) {
+      alert(e?.message ?? 'Failed to update unit status');
+    }
   };
 
-  const handleLeftScene = (unitId: string) => {
-    setUnits(prev => prev.filter(u => u.id !== unitId));
-    logEvent({
-      actor: user?.name || 'IC',
-      action: 'Unit Left Scene',
-      entityType: 'Unit',
-      entityId: unitId,
-      payload: {},
-    });
+  const handleTransporting = async (dbUnitId: number) => {
+    try {
+      await api(`/units/${dbUnitId}/status/`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'TRANSPORTING' }),
+      });
+      await refreshUnits();
+
+      logEvent({
+        actor: user?.name || 'IC',
+        action: 'Unit Transporting',
+        entityType: 'Unit',
+        entityId: String(dbUnitId),
+        payload: { to_status: 'TRANSPORTING' },
+      });
+    } catch (e: any) {
+      alert(e?.message ?? 'Failed to update unit status');
+    }
   };
 
   const runPrediction = async () => {
@@ -181,7 +280,7 @@ export const ICDashboard: React.FC = () => {
       const ambulances = Math.max(0, Math.round(data.prediction?.ambulances_dispatched ?? 0));
       setPredicted({ engines, ambulances });
 
-      // ✅ Helpful: carry predicted location into manual field if empty
+      // carry predicted location into manual field if empty
       if (!reqLocation.trim() && predictionInput.location.trim()) {
         setReqLocation(predictionInput.location.trim());
       }
@@ -197,7 +296,6 @@ export const ICDashboard: React.FC = () => {
   const submitToDatabase = async (engines: number, ambulances: number) => {
     const calls: Promise<any>[] = [];
 
-    // Prefer manual fields, fallback to prediction modal location if set
     const location = reqLocation.trim() || predictionInput.location?.trim() || 'Unknown';
     const priority = reqPriority || 'Medium';
 
@@ -233,7 +331,6 @@ export const ICDashboard: React.FC = () => {
     await Promise.all(calls);
   };
 
-  // ✅ Replaced: DataContext-only submit -> DB submit
   const handleSubmitRequest = async (fromPrediction = false) => {
     if (!incident || !user) return;
 
@@ -244,7 +341,6 @@ export const ICDashboard: React.FC = () => {
     const finalPriority = reqPriority || 'Medium';
 
     try {
-      // Create DB requests (EMS will see them)
       await submitToDatabase(engines, ambulances);
 
       // Optional: keep local DataContext for your UI/outliers demo
@@ -295,9 +391,7 @@ export const ICDashboard: React.FC = () => {
     setReqEngines(predicted.engines);
     setReqAmbulances(predicted.ambulances);
 
-    // ✅ carry location forward if provided
     if (predictionInput.location.trim()) setReqLocation(predictionInput.location.trim());
-    // priority stays whatever you selected
 
     setShowPredictionModal(false);
     setPredicted(null);
@@ -316,6 +410,7 @@ export const ICDashboard: React.FC = () => {
               Incident: <span className="font-medium">{incident.name}</span>
             </p>
           )}
+          {unitsErr && <p className="text-sm text-red-600 mt-2">{unitsErr}</p>}
         </div>
       </div>
 
@@ -332,15 +427,15 @@ export const ICDashboard: React.FC = () => {
                   <Badge>{units.filter(u => u.status === 'On Scene').length} On Scene</Badge>
                 </div>
                 <div className="flex gap-2">
-                  <Button onClick={() => setShowPredictionModal(true)} disabled={units.length > 0}>
+                  <Button onClick={() => setShowPredictionModal(true)} disabled={false}>
                     Initial Prediction
                   </Button>
+
                 </div>
               </div>
 
-              <DataTable columns={unitColumns} data={units as any[]} emptyMessage="No tracked units" />
+              <DataTable columns={unitColumns} data={units as any[]} emptyMessage="No units enroute/on scene" />
 
-              {/* ✅ Manual submit panel (now includes location + priority) */}
               <div className="p-4 border rounded-lg space-y-3">
                 <h3 className="font-medium">Submit Request</h3>
 
@@ -569,7 +664,7 @@ export const ICDashboard: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex justify-end gap-2 mt-3">
-                  <Button onClick={populateRequestFromPrediction} disabled={units.length > 0}>
+                  <Button onClick={populateRequestFromPrediction}>
                     Create Request from Prediction
                   </Button>
                 </div>
