@@ -10,6 +10,9 @@ import { Button } from '@/app/components/ui/button';
 import { TrendingUp, Bell } from 'lucide-react';
 import { RequestDetailDrawer } from './RequestDetailDrawer';
 
+const _env = ((import.meta as unknown) as { env: Record<string, string | undefined> }).env;
+const PREDICTION_API_BASE = (_env.VITE_API_BASE ?? '').replace(/\/$/, '');
+
 const PREDICTION_SUBCATEGORIES: Record<string, string[]> = {
   Fire: [
     'Structure Fire',
@@ -137,10 +140,11 @@ export const ICDashboard: React.FC = () => {
         population_affected_est: predictionInput.patientCount,
         injuries_est: predictionInput.patientCount,
         structures_threatened: predictionInput.buildings,
+        structures_damaged: predictionInput.buildings,
         start_time: new Date().toISOString(),
       };
 
-      const response = await fetch('/api/initial-prediction/', {
+  const response = await fetch(`${PREDICTION_API_BASE}/api/initial-prediction/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ incident: incidentPayload }),
@@ -433,15 +437,21 @@ export const ICDashboard: React.FC = () => {
               <p className="mt-3 text-sm text-destructive">{predictionError}</p>
             )}
             {predicted && (
-              <div className="mt-4 border-t pt-4 space-y-2">
-                <p className="font-medium">Prediction Results</p>
-                <p>
-                  Fire Engines: <strong>{predicted.engines}</strong>
-                </p>
-                <p>
-                  Ambulances: <strong>{predicted.ambulances}</strong>
-                </p>
-                <div className="flex justify-end gap-2 mt-2">
+              <div className="mt-4 border-t pt-4">
+                <p className="text-sm text-muted-foreground mb-2">Prediction Results</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-lg border border-border p-3">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Fire Engines</p>
+                    <p className="text-2xl font-semibold">{predicted.engines}</p>
+                    <p className="text-sm text-muted-foreground">Recommended count</p>
+                  </div>
+                  <div className="rounded-lg border border-border p-3">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Ambulances</p>
+                    <p className="text-2xl font-semibold">{predicted.ambulances}</p>
+                    <p className="text-sm text-muted-foreground">Recommended count</p>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 mt-3">
                   <Button onClick={populateRequestFromPrediction} disabled={units.length > 0}>
                     Create Request from Prediction
                   </Button>

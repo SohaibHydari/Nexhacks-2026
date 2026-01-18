@@ -1,5 +1,10 @@
+import csv
 import json
-import importlib.util
+import math
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
 from django.http import JsonResponse, HttpResponseNotAllowed
 from django.views.decorators.csrf import csrf_exempt
 from django.db import transaction
@@ -249,6 +254,319 @@ def logs_list(request):
     return JsonResponse([log_to_dict(le) for le in qs], safe=False)
 
 # -----------------------
+# Prediction data
+# -----------------------
+
+MODEL_ROWS_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "initial_prediction_model"
+    / "mock_incident_resource_usage.csv"
+)
+
+
+@lru_cache(maxsize=1)
+def load_prediction_rows() -> List[Dict[str, Any]]:
+    with MODEL_ROWS_PATH.open(encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        return list(reader)
+
+
+def infer_state_for_city(rows: List[Dict[str, Any]], city: str) -> str:
+    counts: Dict[str, int] = {}
+    target = city.strip()
+    for row in rows:
+        if str(row.get("city", "")).strip() != target:
+            continue
+        state = str(row.get("state", "")).strip()
+        if state:
+            counts[state] = counts.get(state, 0) + 1
+    if not counts:
+        return ""
+    return max(counts.items(), key=lambda pair: pair[1])[0]
+
+
+@csrf_exempt
+def initial_prediction(request):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    incident = payload.get("incident", {})
+    city = str(incident.get("city", "")).strip()
+    buildings = parse_float(incident.get("structures_threatened"))
+    if buildings == 0:
+        buildings = parse_float(incident.get("structures_damaged"))
+    population = parse_float(incident.get("population_affected_est"))
+    category = str(incident.get("incident_category", "")).strip()
+    subtype = str(incident.get("incident_subtype", "")).strip()
+
+    rows = load_prediction_rows()
+    if not rows:
+        return JsonResponse({"error": "Prediction data unavailable"}, status=503)
+
+    inferred_state = infer_state_for_city(rows, city)
+    query = make_query_incident_from_ui(
+        city=city,
+        buildings_affected=buildings,
+        population_affected=population,
+        incident_category=category,
+        incident_subtype=subtype,
+        inferred_state=inferred_state,
+    )
+
+    try:
+        k = int(payload.get("k", 15))
+    except (TypeError, ValueError):
+        k = 15
+
+    prediction = knn_predict(query=query, rows=rows, k=k)
+    return JsonResponse(prediction)
+
+# -----------------------
 # ML Logic
 # -----------------------
+
+NUMERIC_FEATURES = [
+    "severity_1_5",
+    "duration_hours",
+    "population_affected_est",
+    "injuries_est",
+    "fatalities_est",
+    "structures_threatened",
+    "structures_damaged",
+    "acres_burned",
+    "wind_mph",
+    "precip_inches",
+    "temperature_f",
+    "evacuation_order_issued",
+    "evac_population_est",
+    "hospital_diversion_flag",
+    "start_hour",
+    "start_month",
+]
+
+CATEGORICAL_FEATURES = [
+    "incident_category",
+    "incident_subtype",
+    "city",
+    "state",
+]
+
+
+def parse_float(value: Any) -> float:
+    if value in (None, ""):
+        return 0.0
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def parse_bool(value: Any) -> float:
+    if value in (True, False):
+        return 1.0 if value else 0.0
+    if value is None:
+        return 0.0
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y"}:
+        return 1.0
+    if text in {"0", "false", "no", "n"}:
+        return 0.0
+    return 0.0
+
+
+def parse_datetime(value: Any) -> Optional[datetime]:
+    if not value:
+        return None
+    text = str(value).replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def derive_time_features(row: Dict[str, Any]) -> Tuple[float, float]:
+    start = parse_datetime(row.get("start_time"))
+    if not start:
+        return 0.0, 0.0
+    return float(start.hour), float(start.month)
+
+
+def collect_categorical_levels(rows: List[Dict[str, Any]]) -> Dict[str, List[str]]:
+    levels: Dict[str, set] = {feature: set() for feature in CATEGORICAL_FEATURES}
+    for row in rows:
+        for feature in CATEGORICAL_FEATURES:
+            value = str(row.get(feature, "")).strip()
+            if value:
+                levels[feature].add(value)
+    return {feature: sorted(values) for feature, values in levels.items()}
+
+
+def build_feature_order(categorical_levels: Dict[str, List[str]]) -> List[str]:
+    order = list(NUMERIC_FEATURES)
+    for feature in CATEGORICAL_FEATURES:
+        for level in categorical_levels.get(feature, []):
+            order.append(f"{feature}__{level}")
+    return order
+
+
+def vectorize_incident(
+    incident: Dict[str, Any],
+    feature_order: List[str],
+    categorical_levels: Dict[str, List[str]],
+) -> np.ndarray:
+    values: Dict[str, float] = {}
+
+    for feature in NUMERIC_FEATURES:
+        if feature in {"evacuation_order_issued", "hospital_diversion_flag"}:
+            values[feature] = parse_bool(incident.get(feature))
+        elif feature in {"start_hour", "start_month"}:
+            hour, month = derive_time_features(incident)
+            values["start_hour"] = hour
+            values["start_month"] = month
+        else:
+            values[feature] = parse_float(incident.get(feature))
+
+    for feature in CATEGORICAL_FEATURES:
+        level = str(incident.get(feature, "")).strip()
+        for option in categorical_levels.get(feature, []):
+            values[f"{feature}__{option}"] = 1.0 if option == level else 0.0
+
+    return np.array([values.get(name, 0.0) for name in feature_order], dtype=float)
+
+
+def euclidean_dist(a: np.ndarray, b: np.ndarray) -> float:
+    diff = a - b
+    return float(np.sqrt(np.dot(diff, diff)))
+
+
+def clamp_nonneg(x: float) -> float:
+    return float(x) if x > 0 else 0.0
+
+
+def make_query_incident_from_ui(
+    *,
+    city: str,
+    buildings_affected: float,
+    population_affected: float,
+    incident_category: str,
+    incident_subtype: str,
+    inferred_state: str,
+) -> Dict[str, Any]:
+    score = 0.0
+    score += min(buildings_affected / 25.0, 2.0)
+    score += min(population_affected / 20000.0, 3.0)
+    severity = int(round(1 + min(max(score, 0.0), 4.0)))
+    severity = max(1, min(5, severity))
+
+    return {
+        "severity_1_5": severity,
+        "duration_hours": 0.0,
+        "population_affected_est": population_affected,
+        "injuries_est": 0.0,
+        "fatalities_est": 0.0,
+        "structures_threatened": buildings_affected,
+        "structures_damaged": buildings_affected,
+        "acres_burned": 0.0,
+        "wind_mph": 0.0,
+        "precip_inches": 0.0,
+        "temperature_f": 0.0,
+        "evacuation_order_issued": 0.0,
+        "evac_population_est": 0.0,
+        "hospital_diversion_flag": 0.0,
+        "start_time": None,
+        "incident_category": incident_category,
+        "incident_subtype": incident_subtype,
+        "city": city,
+        "state": inferred_state,
+    }
+
+
+def knn_predict(
+    query: Dict[str, Any],
+    rows: List[Dict[str, Any]],
+    k: int = 15,
+    min_pool: int = 50,
+) -> Dict[str, Any]:
+    if not rows:
+        raise ValueError("Dataset is empty.")
+
+    categorical_levels = collect_categorical_levels(rows)
+    feature_order = build_feature_order(categorical_levels)
+
+    X = np.array(
+        [vectorize_incident(r, feature_order, categorical_levels) for r in rows],
+        dtype=float,
+    )
+    Y = np.array(
+        [
+            [parse_float(r.get("firetrucks_dispatched_engines")), parse_float(r.get("ambulances_dispatched"))]
+            for r in rows
+        ],
+        dtype=float,
+    )
+
+    qv = vectorize_incident(query, feature_order, categorical_levels)
+
+    dists = np.array([euclidean_dist(qv, X[i]) for i in range(X.shape[0])], dtype=float)
+    order = np.argsort(dists)
+
+    k = max(1, int(k))
+    idx = order[: min(k, len(order))]
+
+    d = dists[idx]
+    eps = 1e-6
+    w = 1.0 / (d + eps)
+    w_sum = float(np.sum(w))
+    if w_sum <= 0:
+        pred = np.mean(Y[idx], axis=0)
+    else:
+        pred = (w @ Y[idx]) / w_sum
+
+    pred_engines = int(math.ceil(clamp_nonneg(float(pred[0]))))
+    pred_amb = int(math.ceil(clamp_nonneg(float(pred[1]))))
+
+    top_n = min(5, len(idx))
+    similar = []
+    for rank in range(top_n):
+        i = int(idx[rank])
+        r = rows[i]
+        similar.append(
+            {
+                "rank": rank + 1,
+                "row_index": i,
+                "distance": float(dists[i]),
+                "incident_category": str(r.get("incident_category", "")),
+                "incident_subtype": str(r.get("incident_subtype", "")),
+                "city": str(r.get("city", "")),
+                "state": str(r.get("state", "")),
+                "population_affected_est": parse_float(r.get("population_affected_est")),
+                "structures_damaged": parse_float(r.get("structures_damaged")),
+                "structures_threatened": parse_float(r.get("structures_threatened")),
+                "actual_firetrucks_dispatched_engines": parse_float(r.get("firetrucks_dispatched_engines")),
+                "actual_ambulances_dispatched": parse_float(r.get("ambulances_dispatched")),
+            }
+        )
+
+    return {
+        "prediction": {
+            "firetrucks_dispatched_engines": pred_engines,
+            "ambulances_dispatched": pred_amb,
+        },
+        "query_used": {
+            "incident_category": query.get("incident_category"),
+            "incident_subtype": query.get("incident_subtype"),
+            "city": query.get("city"),
+            "state": query.get("state"),
+            "buildings_affected": query.get("structures_damaged"),
+            "population_affected_est": query.get("population_affected_est"),
+            "severity_1_5": query.get("severity_1_5"),
+        },
+        "similar_incidents_top5": similar,
+        "k_used": int(len(idx)),
+    }
 
