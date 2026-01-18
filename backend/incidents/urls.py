@@ -1,4 +1,5 @@
 from django.urls import path
+from .views import ambulance_low_check
 from . import views
 
 urlpatterns = [
@@ -11,4 +12,6 @@ urlpatterns = [
 
     path("logs/", views.logs_list),
     path("initial-prediction/", views.initial_prediction),
+
+    path("monitor/ambulances/low", ambulance_low_check),
 ]
