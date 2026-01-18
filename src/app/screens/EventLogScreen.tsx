@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useData } from '@/app/contexts/DataContext';
 import { DataTable, Column } from '@/app/components/ics/DataTable';
 import { FilterBar } from '@/app/components/ics/FilterBar';
@@ -7,33 +7,52 @@ import { format } from 'date-fns';
 import { ScrollText } from 'lucide-react';
 
 export const EventLogScreen: React.FC = () => {
-  const { eventLogs } = useData();
+  const { unitEventLogs } = useData();
   const [searchValue, setSearchValue] = useState('');
 
   const columns: Column[] = [
-    { 
-      key: 'timestamp', 
-      label: 'Timestamp',
-      render: (value) => format(new Date(value), 'MMM d, yyyy h:mm:ss a')
+    {
+      key: 'timestamp',
+      label: 'Time',
+      render: (value) => format(new Date(value), 'MMM d, h:mm:ss a'),
     },
-    { 
-      key: 'actor', 
-      label: 'Actor',
-      render: (value) => <Badge variant="secondary">{value}</Badge>
+    {
+      key: 'unitName',
+      label: 'Unit',
+      render: (value, row) => (
+        <div className="flex items-center gap-2">
+          <span className="font-medium">{value}</span>
+          <Badge variant="secondary" className="text-xs">
+            {row.unitId}
+          </Badge>
+        </div>
+      ),
     },
-    { key: 'action', label: 'Action' },
-    { 
-      key: 'entityType', 
-      label: 'Entity',
-      render: (value, row) => `${value} (${row.entityId})`
+    {
+      key: 'statusFrom',
+      label: 'Status From',
+      render: (value) => <Badge variant="outline">{value}</Badge>,
+    },
+    {
+      key: 'statusTo',
+      label: 'Status To',
+      render: (value) => <Badge variant="secondary">{value}</Badge>,
     },
   ];
 
-  const filteredLogs = eventLogs.filter(log =>
-    log.actor.toLowerCase().includes(searchValue.toLowerCase()) ||
-    log.action.toLowerCase().includes(searchValue.toLowerCase()) ||
-    log.entityId.toLowerCase().includes(searchValue.toLowerCase())
-  );
+  const filteredLogs = useMemo(() => {
+    const q = searchValue.trim().toLowerCase();
+    if (!q) return unitEventLogs;
+
+    return unitEventLogs.filter((log) => {
+      return (
+        log.unitId.toLowerCase().includes(q) ||
+        log.unitName.toLowerCase().includes(q) ||
+        log.statusFrom.toLowerCase().includes(q) ||
+        log.statusTo.toLowerCase().includes(q)
+      );
+    });
+  }, [searchValue, unitEventLogs]);
 
   return (
     <div className="p-6">
@@ -43,13 +62,13 @@ export const EventLogScreen: React.FC = () => {
           Event Log
         </h1>
         <p className="text-muted-foreground">
-          Immutable audit trail of all system actions
+          Unit status audit trail (mock data for now)
         </p>
       </div>
 
       <div className="space-y-4">
         <FilterBar
-          searchPlaceholder="Search events..."
+          searchPlaceholder="Search unit, status..."
           searchValue={searchValue}
           onSearchChange={setSearchValue}
         />
@@ -57,7 +76,7 @@ export const EventLogScreen: React.FC = () => {
         <DataTable
           columns={columns}
           data={filteredLogs}
-          emptyMessage="No events logged"
+          emptyMessage="No unit status events yet"
         />
       </div>
     </div>

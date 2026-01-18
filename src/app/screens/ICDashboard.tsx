@@ -43,7 +43,7 @@ const PREDICTION_SUBCATEGORIES: Record<string, string[]> = {
 
 
 export const ICDashboard: React.FC = () => {
-  const { requests, addRequest, logEvent } = useData();
+  const { requests, addRequest, logEvent, logUnitStatusChange } = useData();
   const { user, incident } = useAuth();
   const [selectedRequest, setSelectedRequest] = useState<Request | null>(null);
 
@@ -106,27 +106,56 @@ export const ICDashboard: React.FC = () => {
     },
   ];
 
-  const handleMarkOnScene = (unitId: string) => {
-    setUnits(prev => prev.map(u => (u.id === unitId ? { ...u, status: 'On Scene' } : u)));
-    logEvent({
-      actor: user?.name || 'IC',
-      action: 'Unit On Scene',
-      entityType: 'Unit',
-      entityId: unitId,
-      payload: {},
-    });
-  };
+const handleMarkOnScene = (unitId: string) => {
+  setUnits(prev =>
+    prev.map(u => {
+      if (u.id !== unitId) return u;
 
-  const handleLeftScene = (unitId: string) => {
-    setUnits(prev => prev.filter(u => u.id !== unitId));
-    logEvent({
-      actor: user?.name || 'IC',
-      action: 'Unit Left Scene',
-      entityType: 'Unit',
-      entityId: unitId,
-      payload: {},
-    });
-  };
+      logUnitStatusChange(
+        u.id,
+        `${u.unitType} ${u.id}`,
+        u.status,
+        'On Scene'
+      );
+
+      return { ...u, status: 'On Scene' };
+    })
+  );
+
+  logEvent({
+    actor: user?.name || 'IC',
+    action: 'Unit On Scene',
+    entityType: 'Unit',
+    entityId: unitId,
+    payload: {},
+  });
+};
+
+const handleLeftScene = (unitId: string) => {
+  setUnits(prev =>
+    prev.map(u => {
+      if (u.id !== unitId) return u;
+
+      logUnitStatusChange(
+        u.id,
+        `${u.unitType} ${u.id}`,
+        u.status,
+        'Transporting'
+      );
+
+      return { ...u, status: 'Transporting' };
+    })
+  );
+
+  logEvent({
+    actor: user?.name || 'IC',
+    action: 'Unit Transporting',
+    entityType: 'Unit',
+    entityId: unitId,
+    payload: {},
+  });
+};
+
 
   const runPrediction = async () => {
     setPredictionLoading(true);
@@ -244,6 +273,8 @@ export const ICDashboard: React.FC = () => {
                 <div className="flex gap-4 items-center">
                   <Badge>{units.filter(u => u.status === 'In Transit').length} Enroute</Badge>
                   <Badge>{units.filter(u => u.status === 'On Scene').length} On Scene</Badge>
+                  <Badge>{units.filter(u => u.status === 'Transporting').length} Transporting</Badge>
+
                 </div>
                 <div className="flex gap-2">
                   <Button onClick={() => setShowPredictionModal(true)} disabled={units.length > 0}>Initial Prediction</Button>

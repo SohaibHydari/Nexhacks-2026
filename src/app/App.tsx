@@ -11,6 +11,7 @@ import { RequestDetailDrawer } from '@/app/screens/RequestDetailDrawer';
 import { Request, Bulletin } from '@/app/contexts/DataContext';
 import { Toaster } from '@/app/components/ui/sonner';
 import { Button } from '@/app/components/ui/button';
+import { EventLogScreen } from '@/app/screens/EventLogScreen';
 
 const AppContent: React.FC = () => {
   const { user, incident, clearIncident } = useAuth();
@@ -57,6 +58,7 @@ const AppContent: React.FC = () => {
         <main className="flex-1 overflow-y-auto">
           {/* IC Routes */}
           {user.role === 'IC' && currentPath === '/dashboard' && <ICDashboard />}
+          {user.role === 'IC' && currentPath === '/event-log' && (<EventLogScreen />)}
 
           {/* EMS/Fire Routes */}
           {user.role === 'EMSFire' && currentPath === '/field' && (

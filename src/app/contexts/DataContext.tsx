@@ -25,6 +25,16 @@ export interface Unit {
   status: UnitStatus;
 }
 
+export interface UnitEventLog {
+  id: string;
+  timestamp: string;
+  unitId: string;
+  unitName: string;
+  statusFrom: string;
+  statusTo: string;
+}
+
+
 export type VarianceFlag = 'OK' | 'Warning' | 'Critical';
 //So that we can add to select screen
 export type IncidentStatus = 'Active' | 'Monitoring' | 'Closed';
@@ -159,6 +169,13 @@ interface DataContextType {
   setUnitStatus: (unitId: string, status: UnitStatus) => void;
   respondToRequest: (requestId: string, assignedUnitIds: string[], note?: string) => void;
   addIncident: (incident: Omit<Incident, 'id' | 'startTime'> & { startTime?: string }) => void;
+    unitEventLogs: UnitEventLog[];
+  logUnitStatusChange: (
+    unitId: string,
+    unitName: string,
+    from: string,
+    to: string
+  ) => void;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -397,7 +414,43 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [eventLogs, setEventLogs] = useState<EventLog[]>([]);
   const [units, setUnits] = useState<Unit[]>(initialUnits);
   const [incidents, setIncidents] = useState<Incident[]>(initialIncidents);
+  const [unitEventLogs, setUnitEventLogs] = useState<UnitEventLog[]>([
+  {
+    id: '1',
+    timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+    unitId: 'ENG-1',
+    unitName: 'Fire Engine 1',
+    statusFrom: 'Enroute',
+    statusTo: 'On Scene',
+  },
+  {
+    id: '2',
+    timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
+    unitId: 'AMB-2',
+    unitName: 'Ambulance 2',
+    statusFrom: 'Available',
+    statusTo: 'Enroute',
+  },
+]);
 
+const logUnitStatusChange = (
+  unitId: string,
+  unitName: string,
+  from: string,
+  to: string
+) => {
+  setUnitEventLogs(prev => [
+    {
+      id: crypto.randomUUID(),
+      timestamp: new Date().toISOString(),
+      unitId,
+      unitName,
+      statusFrom: from,
+      statusTo: to,
+    },
+    ...prev,
+  ]);
+};
 
 
   const setUnitStatus = (unitId: string, status: UnitStatus) => {
@@ -610,6 +663,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       eventLogs,
       // NEW EMS tables
       units,
+      unitEventLogs,
       //new incident
       incidents,
       addRequest,
@@ -626,6 +680,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       respondToRequest,
       //new incident functions
       addIncident,
+      logUnitStatusChange,
     }}>
       {children}
     </DataContext.Provider>
