@@ -10,12 +10,23 @@ import { FieldHomeScreen } from '@/app/screens/FieldHomeScreen';
 import { RequestDetailDrawer } from '@/app/screens/RequestDetailDrawer';
 import { Request, Bulletin } from '@/app/contexts/DataContext';
 import { Toaster } from '@/app/components/ui/sonner';
+import { Button } from '@/app/components/ui/button';
 
 const AppContent: React.FC = () => {
-  const { user, incident } = useAuth();
+  const { user, incident, clearIncident } = useAuth();
   const [currentPath, setCurrentPath] = useState('/dashboard');
   const [selectedRequest, setSelectedRequest] = useState<Request | null>(null);
   const [selectedBulletin, setSelectedBulletin] = useState<Bulletin | null>(null);
+
+  const goToIncidentSelect = () => {
+    // close any drawers/modals
+    setSelectedRequest(null);
+    setSelectedBulletin(null);
+
+    // clear incident + route to select screen
+    clearIncident();
+    setCurrentPath('/select-incident');
+  };
 
   // If not logged in, show login screen
   if (!user) {
@@ -24,25 +35,31 @@ const AppContent: React.FC = () => {
 
   // If logged in but no incident selected, show incident select
   if (!incident) {
-    return <IncidentSelectScreen onSelect={() => {
-      // Navigate to role-specific home
-      if (user.role === 'IC') setCurrentPath('/dashboard');
-      else if (user.role === 'EMSFire' || user.role === 'Fire') setCurrentPath('/field');
-    }} />;
+    return (
+      <IncidentSelectScreen
+        onSelect={() => {
+          // Navigate to role-specific home
+          if (user.role === 'IC') setCurrentPath('/dashboard');
+          else if (user.role === 'EMSFire') setCurrentPath('/field');
+        }}
+      />
+    );
   }
 
   // Main application layout
   return (
     <div className="h-screen flex flex-col bg-gray-50">
       <TopNav />
+
+
       <div className="flex-1 flex overflow-hidden">
         <SideNav currentPath={currentPath} onNavigate={setCurrentPath} />
         <main className="flex-1 overflow-y-auto">
           {/* IC Routes */}
           {user.role === 'IC' && currentPath === '/dashboard' && <ICDashboard />}
-          
+
           {/* EMS/Fire Routes */}
-          {(user.role === 'EMSFire') && currentPath === '/field' && (
+          {user.role === 'EMSFire' && currentPath === '/field' && (
             <FieldHomeScreen
               onNavigateToCreateRequest={() => setCurrentPath('/create-request')}
               onNavigateToBulletins={() => setCurrentPath('/bulletins')}
@@ -55,12 +72,9 @@ const AppContent: React.FC = () => {
 
       {/* Global Drawers */}
       {selectedRequest && (
-        <RequestDetailDrawer
-          request={selectedRequest}
-          onClose={() => setSelectedRequest(null)}
-        />
+        <RequestDetailDrawer request={selectedRequest} onClose={() => setSelectedRequest(null)} />
       )}
-      
+
       <Toaster />
     </div>
   );

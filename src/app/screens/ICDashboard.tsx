@@ -37,10 +37,11 @@ const PREDICTION_SUBCATEGORIES: Record<string, string[]> = {
   Infrastructure: ['Water Main Break', 'Bridge Collapse', 'Cyber Outage', 'Damaged Gas Line', 'Power Outage'],
 };
 
+
+
 export const ICDashboard: React.FC = () => {
   const { requests, addRequest, logEvent } = useData();
   const { user, incident } = useAuth();
-
   const [selectedRequest, setSelectedRequest] = useState<Request | null>(null);
 
   // Units state
@@ -69,11 +70,11 @@ export const ICDashboard: React.FC = () => {
     disasterType: 'Fire',
     subCategory: PREDICTION_SUBCATEGORIES['Fire'][0],
   });
-  
+
   const [predicted, setPredicted] = useState<{ engines: number; ambulances: number } | null>(null);
   const [predictionLoading, setPredictionLoading] = useState(false);
   const [predictionError, setPredictionError] = useState<string | null>(null);
-  
+
   // Submit request manual inputs
   const [reqEngines, setReqEngines] = useState(0);
   const [reqAmbulances, setReqAmbulances] = useState(0);
@@ -102,25 +103,29 @@ export const ICDashboard: React.FC = () => {
     },
   ];
 
-  // Handlers for unit lifecycle
-  // const handleMarkInTransit = (unitId: string) => {
-  //   setUnits(prev => prev.map(u => u.id === unitId ? { ...u, status: 'In Transit' } : u));
-  //   logEvent({ actor: user?.name || 'IC', action: 'Unit Enroute', entityType: 'Unit', entityId: unitId, payload: {} });
-  // };
-
   const handleMarkOnScene = (unitId: string) => {
-    setUnits(prev => prev.map(u => u.id === unitId ? { ...u, status: 'On Scene' } : u));
-    logEvent({ actor: user?.name || 'IC', action: 'Unit On Scene', entityType: 'Unit', entityId: unitId, payload: {} });
+    setUnits(prev => prev.map(u => (u.id === unitId ? { ...u, status: 'On Scene' } : u)));
+    logEvent({
+      actor: user?.name || 'IC',
+      action: 'Unit On Scene',
+      entityType: 'Unit',
+      entityId: unitId,
+      payload: {},
+    });
   };
 
   const handleLeftScene = (unitId: string) => {
-    // remove unit from IC page when they leave scene
     setUnits(prev => prev.filter(u => u.id !== unitId));
-    logEvent({ actor: user?.name || 'IC', action: 'Unit Left Scene', entityType: 'Unit', entityId: unitId, payload: {} });
+    logEvent({
+      actor: user?.name || 'IC',
+      action: 'Unit Left Scene',
+      entityType: 'Unit',
+      entityId: unitId,
+      payload: {},
+    });
   };
 
-
-    const runPrediction = async () => {
+  const runPrediction = async () => {
     setPredictionLoading(true);
     setPredictionError(null);
     try {
@@ -134,16 +139,15 @@ export const ICDashboard: React.FC = () => {
         structures_threatened: predictionInput.buildings,
         start_time: new Date().toISOString(),
       };
+
       const response = await fetch('/api/initial-prediction/', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ incident: incidentPayload }),
       });
-      if (!response.ok) {
-        throw new Error('Prediction request failed.');
-      }
+
+      if (!response.ok) throw new Error('Prediction request failed.');
+
       const data = await response.json();
       const engines = Math.max(0, Math.round(data.prediction?.firetrucks_dispatched_engines ?? 0));
       const ambulances = Math.max(0, Math.round(data.prediction?.ambulances_dispatched ?? 0));
@@ -156,15 +160,12 @@ export const ICDashboard: React.FC = () => {
     }
   };
 
-  const handleInitialPredictionClick = () => {
-    setShowPredictionModal(true);
-    runPrediction();
-  };
-
   const handleSubmitRequest = (fromPrediction = false) => {
     if (!incident || !user) return;
+
     const engines = fromPrediction && predicted ? predicted.engines : reqEngines;
     const ambulances = fromPrediction && predicted ? predicted.ambulances : reqAmbulances;
+
     const resources = [] as any[];
     if (ambulances > 0) resources.push({ id: `RL-A-${Date.now()}`, resourceType: 'Ambulances', qtyRequested: ambulances });
     if (engines > 0) resources.push({ id: `RL-E-${Date.now()}`, resourceType: 'Fire Engines', qtyRequested: engines });
@@ -185,7 +186,14 @@ export const ICDashboard: React.FC = () => {
       resources,
     });
 
-    logEvent({ actor: user.name, action: 'Submitted Request', entityType: 'Request', entityId: 'TBD', payload: { engines, ambulances } });
+    logEvent({
+      actor: user.name,
+      action: 'Submitted Request',
+      entityType: 'Request',
+      entityId: 'TBD',
+      payload: { engines, ambulances },
+    });
+
     setShowPredictionModal(false);
     setPredicted(null);
     setReqAmbulances(0);
@@ -196,19 +204,28 @@ export const ICDashboard: React.FC = () => {
     if (!predicted) return;
     setReqEngines(predicted.engines);
     setReqAmbulances(predicted.ambulances);
-    // close modal but do not submit
     setShowPredictionModal(false);
     setPredicted(null);
   };
 
-  // Prediction summary (reuse small card area on right)
-  const outlierRequests = requests.filter((r: Request) => r.varianceFlag && r.varianceFlag !== 'OK').slice(0, 5);
+  const outlierRequests = requests
+    .filter((r: Request) => r.varianceFlag && r.varianceFlag !== 'OK')
+    .slice(0, 5);
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold mb-2">Operations Dashboard</h1>
-        <p className="text-muted-foreground">Monitor and triage resource requests across the incident</p>
+      {/* ✅ TOP BAR WITH BACK BUTTON */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold mb-2">Operations Dashboard</h1>
+          <p className="text-muted-foreground">Monitor and triage resource requests across the incident</p>
+          {incident && (
+            <p className="text-sm text-muted-foreground mt-1">
+              Incident: <span className="font-medium">{incident.name}</span>
+            </p>
+          )}
+        </div>
+
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -225,38 +242,51 @@ export const ICDashboard: React.FC = () => {
                   <Badge>{units.filter(u => u.status === 'On Scene').length} On Scene</Badge>
                 </div>
                 <div className="flex gap-2">
-                  <Button onClick={() => setShowPredictionModal(true)} disabled={units.length > 0}>Initial Prediction</Button>
-                  {/* <Button onClick={() => { setReqAmbulances(2); setReqEngines(2); }} variant="outline">Quick Request</Button> */}
+                  <Button onClick={() => setShowPredictionModal(true)} disabled={units.length > 0}>
+                    Initial Prediction
+                  </Button>
                 </div>
               </div>
 
-              <DataTable
-                columns={unitColumns}
-                data={units as any[]}
-                emptyMessage="No tracked units"
-              />
+              <DataTable columns={unitColumns} data={units as any[]} emptyMessage="No tracked units" />
 
               {/* Manual submit panel */}
               <div className="p-4 border rounded-lg">
                 <h3 className="font-medium mb-2">Submit Request</h3>
                 <div className="flex gap-2 items-center">
                   <label className="text-sm">Ambulances</label>
-                  <input type="number" min={0} value={reqAmbulances} onChange={e => setReqAmbulances(Number(e.target.value))} className="input input-sm" />
+                  <input
+                    type="number"
+                    min={0}
+                    value={reqAmbulances}
+                    onChange={e => setReqAmbulances(Number(e.target.value))}
+                    className="input input-sm"
+                  />
                   <label className="text-sm">Fire Engines</label>
-                  <input type="number" min={0} value={reqEngines} onChange={e => setReqEngines(Number(e.target.value))} className="input input-sm" />
-                  <Button onClick={() => handleSubmitRequest(false)} disabled={reqAmbulances === 0 && reqEngines === 0}>Submit</Button>
+                  <input
+                    type="number"
+                    min={0}
+                    value={reqEngines}
+                    onChange={e => setReqEngines(Number(e.target.value))}
+                    className="input input-sm"
+                  />
+                  <Button onClick={() => handleSubmitRequest(false)} disabled={reqAmbulances === 0 && reqEngines === 0}>
+                    Submit
+                  </Button>
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Right Column - Predictions & Hospital Feed */}
+        {/* Right Column */}
         <div className="space-y-4">
-          {/* Prediction Summary */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><TrendingUp className="h-4 w-4" />Prediction Outliers</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" />
+                Prediction Outliers
+              </CardTitle>
             </CardHeader>
             <CardContent>
               {outlierRequests.length === 0 ? (
@@ -264,13 +294,22 @@ export const ICDashboard: React.FC = () => {
               ) : (
                 <div className="space-y-3">
                   {outlierRequests.map((req: Request) => (
-                    <div key={req.id} className="p-3 border rounded-lg hover:bg-accent cursor-pointer transition-colors" onClick={() => setSelectedRequest(req)}>
+                    <div
+                      key={req.id}
+                      className="p-3 border rounded-lg hover:bg-accent cursor-pointer transition-colors"
+                      onClick={() => setSelectedRequest(req)}
+                    >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1">
                           <p className="font-medium text-sm">{req.id}</p>
                           <p className="text-xs text-muted-foreground">{req.requesterOrg}</p>
                         </div>
-                        <Badge variant={req.varianceFlag === 'Critical' ? 'destructive' : 'default'} className="text-xs">{req.varianceFlag}</Badge>
+                        <Badge
+                          variant={req.varianceFlag === 'Critical' ? 'destructive' : 'default'}
+                          className="text-xs"
+                        >
+                          {req.varianceFlag}
+                        </Badge>
                       </div>
                     </div>
                   ))}
@@ -279,46 +318,61 @@ export const ICDashboard: React.FC = () => {
             </CardContent>
           </Card>
 
-          
-
-          {/* Quick Bulletin */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Bell className="h-4 w-4" />Recent Bulletins</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Bell className="h-4 w-4" />
+                Recent Bulletins
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <Button variant="outline" className="w-full">Create Bulletin</Button>
+              <Button variant="outline" className="w-full">
+                Create Bulletin
+              </Button>
             </CardContent>
           </Card>
         </div>
       </div>
 
-      {/* Request Detail Drawer */}
-      {selectedRequest && (
-        <RequestDetailDrawer request={selectedRequest} onClose={() => setSelectedRequest(null)} />
-      )}
-
-      
+      {selectedRequest && <RequestDetailDrawer request={selectedRequest} onClose={() => setSelectedRequest(null)} />}
 
       {/* Prediction Modal */}
       {showPredictionModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white p-6 rounded-lg w-[520px]">
             <h3 className="text-lg font-medium mb-4">Initial Prediction</h3>
+
             <div className="space-y-2">
               <div>
                 <label className="block text-sm">City Location</label>
-                <input value={predictionInput.location} onChange={e => setPredictionInput(i => ({ ...i, location: e.target.value }))} className="w-full input" />
+                <input
+                  value={predictionInput.location}
+                  onChange={e => setPredictionInput(i => ({ ...i, location: e.target.value }))}
+                  className="w-full input"
+                />
               </div>
+
               <div>
                 <label className="block text-sm">Buildings Affected</label>
-                <input type = "number" value={predictionInput.buildings} onChange={e => setPredictionInput(i => ({ ...i, buildings: Number(e.target.value)}))} className="w-full input" />
+                <input
+                  type="number"
+                  value={predictionInput.buildings}
+                  onChange={e => setPredictionInput(i => ({ ...i, buildings: Number(e.target.value) }))}
+                  className="w-full input"
+                />
               </div>
+
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block text-sm">Approx. Affected Population</label>
-                  <input type="number" value={predictionInput.patientCount} onChange={e => setPredictionInput(i => ({ ...i, patientCount: Number(e.target.value) }))} className="w-full input" />
+                  <input
+                    type="number"
+                    value={predictionInput.patientCount}
+                    onChange={e => setPredictionInput(i => ({ ...i, patientCount: Number(e.target.value) }))}
+                    className="w-full input"
+                  />
                 </div>
+
                 <div>
                   <label className="block text-sm">Disaster Type</label>
                   <select
@@ -340,6 +394,7 @@ export const ICDashboard: React.FC = () => {
                     <option value="Public Health">Public Health</option>
                   </select>
                 </div>
+
                 <div>
                   <label className="block text-sm">Subcategory</label>
                   <select
@@ -347,28 +402,46 @@ export const ICDashboard: React.FC = () => {
                     onChange={e => setPredictionInput(i => ({ ...i, subCategory: e.target.value }))}
                     className="w-full input"
                   >
-                    {(
-                      PREDICTION_SUBCATEGORIES[predictionInput.disasterType] ?? ['General']
-                    ).map(sub => (
-                      <option key={sub} value={sub}>{sub}</option>
+                    {(PREDICTION_SUBCATEGORIES[predictionInput.disasterType] ?? ['General']).map(sub => (
+                      <option key={sub} value={sub}>
+                        {sub}
+                      </option>
                     ))}
                   </select>
                 </div>
               </div>
+
+              {predictionError && <p className="text-sm text-red-600">{predictionError}</p>}
             </div>
 
             <div className="mt-4 flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => { setShowPredictionModal(false); setPredicted(null); }}>Cancel</Button>
-              <Button onClick={runPrediction}>Run Prediction</Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setShowPredictionModal(false);
+                  setPredicted(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button onClick={runPrediction} disabled={predictionLoading}>
+                {predictionLoading ? 'Running...' : 'Run Prediction'}
+              </Button>
             </div>
 
             {predicted && (
               <div className="mt-4 border-t pt-4 space-y-2">
                 <p className="font-medium">Prediction Results</p>
-                <p>Fire Engines: <strong>{predicted.engines}</strong></p>
-                <p>Ambulances: <strong>{predicted.ambulances}</strong></p>
+                <p>
+                  Fire Engines: <strong>{predicted.engines}</strong>
+                </p>
+                <p>
+                  Ambulances: <strong>{predicted.ambulances}</strong>
+                </p>
                 <div className="flex justify-end gap-2 mt-2">
-                  <Button onClick={populateRequestFromPrediction} disabled={units.length > 0}>Create Request from Prediction</Button>
+                  <Button onClick={populateRequestFromPrediction} disabled={units.length > 0}>
+                    Create Request from Prediction
+                  </Button>
                 </div>
               </div>
             )}
